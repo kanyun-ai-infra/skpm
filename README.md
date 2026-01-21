@@ -1,87 +1,136 @@
+<div align="center">
+
 # reskill
 
-**AI Skills Package Manager** - Git-based skills management for AI agents
+**Git-based Skills Package Manager for AI Agents**
+
+*Declarative skill management like npm/Go modules — install, version, sync, and share AI agent skills*
 
 [![npm version](https://img.shields.io/npm/v/reskill.svg)](https://www.npmjs.com/package/reskill)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 概述
+English | [简体中文](./README.zh-CN.md)
 
-reskill 是一个基于 Git 的 AI Skills 包管理系统，类似 npm/Go modules 的架构，实现 AI Skills 的版本化管理、共享和复用。
+</div>
 
-## 特性
+---
 
-- 🚀 **Git 即 Registry** - 无需额外服务，git 仓库就是 skill 存储源
-- 📦 **声明式配置** - skills.json 清晰表达项目依赖
-- 🔒 **版本锁定** - 支持精确版本、范围版本、latest
-- 🔗 **本地开发** - 支持 link 本地 skill 进行开发调试
-- ⚡ **全局缓存** - 避免重复下载，加速安装
-
-## 安装
+## Quick Start
 
 ```bash
-# 全局安装
-npm install -g reskill
-
-# 或使用 npx
-npx reskill <command>
-```
-
-## 快速开始
-
-```bash
-# 1. 初始化项目
+# 1. Initialize project
 reskill init
 
-# 2. 安装 skill
-reskill install github:user/my-skill@v1.0.0
+# 2. Install a skill
+reskill install github:anthropics/skills/frontend-design@latest
 
-# 3. 列出已安装的 skills
+# 3. List installed skills
 reskill list
 ```
 
-## 命令
+## What is reskill?
 
-### 初始化
+reskill is a **Git-based package manager** for AI agent skills, similar to npm or Go modules. It provides declarative configuration, version locking, and seamless synchronization for managing skills across projects and teams.
 
-```bash
-reskill init                    # 创建 skills.json
-reskill init --name my-project  # 指定项目名称
-reskill init --registry gitlab  # 使用 gitlab 作为默认 registry
+**Supports:** Cursor, Claude Code, Codex, OpenCode, Windsurf, GitHub Copilot, and more.
+
+## Why reskill?
+
+Unlike one-time installers (add-skill) or centralized registries (skild), reskill offers **fine-grained skill management and synchronization**:
+
+### Local Experience
+
+- **Declarative config** — `skills.json` clearly expresses project dependencies
+- **Global cache** — Avoid redundant downloads, speed up installation
+- **Local development** — Use `link` to develop and debug skills locally
+
+### Engineering-Grade Management
+
+- **Version locking** — `skills.lock` ensures team consistency
+- **Flexible versioning** — Support exact versions, semver ranges, branches, and commits
+- **Git as Registry** — No additional services needed, any Git repo is a skill source
+
+### Cross-Project Sync
+
+- **Version controlled** — Commit `skills.json` and `skills.lock` to your repo
+- **CI integration** — Run `reskill install` in CI to verify dependencies
+- **Multi-registry** — Support GitHub, GitLab, and private repositories
+
+### Flexible Version Strategy
+
+```json
+{
+  "skills": {
+    "frontend-design": "github:anthropics/skills/frontend-design@latest",
+    "code-review": "github:team/code-review@v2.1.0",
+    "testing": "github:team/testing@^1.0.0"
+  }
+}
 ```
 
-### 安装
+When running `reskill update`:
+- `@latest` skills automatically update to the newest tag
+- `@v2.1.0` stays locked
+- `@^1.0.0` updates to the latest 1.x.x version
+
+## Installation
 
 ```bash
-reskill install                          # 安装 skills.json 中的所有 skills
-reskill install <skill>                  # 安装单个 skill
-reskill install github:user/skill@v1.0.0 # 安装指定版本
-reskill install user/skill@latest        # 安装最新版本
-reskill install user/skill@^1.0.0        # 安装 semver 范围
-reskill install --force                  # 强制重新安装
+# Global install
+npm install -g reskill
+
+# Or use npx
+npx reskill <command>
 ```
 
-### 管理
+## Usage
+
+### Source Formats
 
 ```bash
-reskill list                    # 列出已安装 skills
-reskill list --json             # JSON 格式输出
-reskill info <skill>            # 查看 skill 详情
-reskill update                  # 更新所有 skills
-reskill update <skill>          # 更新单个 skill
-reskill outdated                # 检查过期 skills
-reskill uninstall <skill>       # 卸载 skill
+# GitHub shorthand
+reskill install github:user/skill@v1.0.0
+
+# Full URL
+reskill install https://github.com/user/skill
+
+# GitLab
+reskill install gitlab:group/skill@latest
+
+# Private registry
+reskill install gitlab.company.com:team/skill@v1.0.0
+
+# Default registry (from skills.json)
+reskill install user/skill@v1.0.0
 ```
 
-### 开发
+### Version Specification
 
-```bash
-reskill link <path>             # 链接本地 skill（开发用）
-reskill link <path> --name xxx  # 链接并指定名称
-reskill unlink <skill>          # 取消链接
-```
+| Format | Example | Description |
+|--------|---------|-------------|
+| Exact | `@v1.0.0` | Lock to specific tag |
+| Latest | `@latest` | Get the latest tag |
+| Range | `@^2.0.0` | Semver compatible (>=2.0.0 <3.0.0) |
+| Branch | `@branch:develop` | Specific branch |
+| Commit | `@commit:abc1234` | Specific commit hash |
 
-## 配置文件
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `reskill init` | Initialize `skills.json` in current directory |
+| `reskill install [skill]` | Install skills from `skills.json` or a specific skill |
+| `reskill list` | List installed skills |
+| `reskill info <skill>` | Show skill details |
+| `reskill update [skill]` | Update all or specific skill |
+| `reskill outdated` | Check for outdated skills |
+| `reskill uninstall <skill>` | Remove a skill |
+| `reskill link <path>` | Link local skill for development |
+| `reskill unlink <skill>` | Unlink a local skill |
+
+Run `reskill <command> --help` for detailed options.
+
+## Configuration
 
 ### skills.json
 
@@ -102,56 +151,33 @@ reskill unlink <skill>          # 取消链接
 }
 ```
 
-### 版本规范
+### skills.lock
 
-| 格式 | 示例 | 说明 |
-|-----|------|------|
-| 精确版本 | `@v1.0.0` | 锁定到指定 tag |
-| 最新版本 | `@latest` | 获取最新 tag |
-| 范围版本 | `@^2.0.0` | semver 兼容（>=2.0.0 <3.0.0） |
-| 分支 | `@branch:develop` | 指定分支 |
-| Commit | `@commit:abc1234` | 指定 commit hash |
+The lock file records exact versions and commit hashes to ensure reproducible installations across your team.
 
-### 仓库引用格式
+## Multi-Agent Support
 
-```
-完整格式: <registry>:<owner>/<repo>@<version>
-简写格式: <owner>/<repo>@<version>  (使用默认 registry)
+reskill works with all major AI coding agents. Skills are installed to the `.skills/` directory by default and can be integrated with any agent.
 
-示例:
-  github:user/skill@v1.0.0
-  gitlab:group/skill@latest
-  gitlab.company.com:team/skill@v1.0.0
-  user/skill@v1.0.0  → 使用 defaults.registry
-```
+| Agent | Integration Path |
+|-------|------------------|
+| Cursor | `.cursor/rules/` or `.cursor/skills/` |
+| Claude Code | `.claude/skills/` |
+| Codex | `.codex/skills/` |
+| OpenCode | `.opencode/skills/` |
+| Windsurf | `.windsurf/skills/` |
+| GitHub Copilot | `.github/skills/` |
 
-## 目录结构
+## Skill Repository Structure
 
-安装后的项目结构：
-
-```
-my-project/
-├── skills.json          # 依赖声明
-├── skills.lock          # 版本锁定
-└── .skills/             # 安装目录
-    ├── planning/
-    │   ├── skill.json
-    │   └── SKILL.md
-    └── code-review/
-        ├── skill.json
-        └── SKILL.md
-```
-
-## Skill 仓库结构
-
-每个 Skill 仓库应遵循以下结构：
+Each skill repository should follow this structure:
 
 ```
 my-skill/
-├── skill.json           # 元数据（必需）
-├── SKILL.md             # 主入口文档（必需）
-├── README.md            # 仓库说明
-└── templates/           # 模板文件（可选）
+├── skill.json           # Metadata (required)
+├── SKILL.md             # Main entry document (required)
+├── README.md            # Repository description
+└── templates/           # Template files (optional)
 ```
 
 ### skill.json
@@ -168,31 +194,54 @@ my-skill/
 }
 ```
 
-## 环境变量
+## Project Structure
 
-| 变量 | 说明 | 默认值 |
-|-----|------|-------|
-| `SKPM_CACHE_DIR` | 全局缓存目录 | `~/.reskill-cache` |
-| `DEBUG` | 启用调试日志 | - |
+After installation:
 
-## 开发
+```
+my-project/
+├── skills.json          # Dependency declaration
+├── skills.lock          # Version lock file
+└── .skills/             # Installation directory
+    ├── planning/
+    │   ├── skill.json
+    │   └── SKILL.md
+    └── code-review/
+        ├── skill.json
+        └── SKILL.md
+```
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SKPM_CACHE_DIR` | Global cache directory | `~/.reskill-cache` |
+| `DEBUG` | Enable debug logging | - |
+
+## Development
 
 ```bash
-# 安装依赖
+# Install dependencies
 pnpm install
 
-# 开发模式
+# Development mode
 pnpm dev
 
-# 构建
+# Build
 pnpm build
 
-# 运行测试
+# Run tests
 pnpm test
 
-# 类型检查
+# Type check
 pnpm typecheck
 ```
+
+## Related Projects
+
+- [Agent Skills Specification](https://agentskills.io)
+- [add-skill](https://github.com/vercel-labs/add-skill) — One-time skill installer
+- [skild](https://github.com/Peiiii/skild) — Registry-based skill manager
 
 ## License
 
