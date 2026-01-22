@@ -632,6 +632,149 @@ describe('SkillManager bug fixes', () => {
   });
 });
 
+// Tests for update() behavior - checking remote before reinstalling
+describe('SkillManager update() should check remote before reinstalling', () => {
+  let tempDir: string;
+  let skillManager: SkillManager;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reskill-update-test-'));
+    skillManager = new SkillManager(tempDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('should skip update when remote commit matches local lock', async () => {
+    // Setup: Create skills.json
+    fs.writeFileSync(
+      path.join(tempDir, 'skills.json'),
+      JSON.stringify({
+        skills: { 'test-skill': 'github:user/test-skill@main' },
+      }),
+    );
+
+    // Setup: Create skills.lock with a commit hash
+    const testCommit = 'abc123def456789012345678901234567890abcd';
+    fs.writeFileSync(
+      path.join(tempDir, 'skills.lock'),
+      JSON.stringify({
+        lockfileVersion: 1,
+        skills: {
+          'test-skill': {
+            source: 'github:user/test-skill',
+            version: 'main',
+            ref: 'main',
+            resolved: 'https://github.com/user/test-skill.git',
+            commit: testCommit,
+            installedAt: new Date().toISOString(),
+          },
+        },
+      }),
+    );
+
+    // Create skill in canonical location
+    const skillDir = path.join(tempDir, '.agents', 'skills', 'test-skill');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '# Test Skill');
+
+    // Action: Call checkNeedsUpdate with same commit
+    const needsUpdate = await skillManager.checkNeedsUpdate('test-skill', testCommit);
+
+    // Assert: Should not need update when commits match
+    expect(needsUpdate).toBe(false);
+  });
+
+  it('should update when remote commit differs from local lock', async () => {
+    // Setup: Create skills.json
+    fs.writeFileSync(
+      path.join(tempDir, 'skills.json'),
+      JSON.stringify({
+        skills: { 'test-skill': 'github:user/test-skill@main' },
+      }),
+    );
+
+    // Setup: Create skills.lock with a commit hash
+    const localCommit = 'abc123def456789012345678901234567890abcd';
+    const remoteCommit = 'def456789012345678901234567890abcdef123';
+    fs.writeFileSync(
+      path.join(tempDir, 'skills.lock'),
+      JSON.stringify({
+        lockfileVersion: 1,
+        skills: {
+          'test-skill': {
+            source: 'github:user/test-skill',
+            version: 'main',
+            ref: 'main',
+            resolved: 'https://github.com/user/test-skill.git',
+            commit: localCommit,
+            installedAt: new Date().toISOString(),
+          },
+        },
+      }),
+    );
+
+    // Action: Call checkNeedsUpdate with different commit
+    const needsUpdate = await skillManager.checkNeedsUpdate('test-skill', remoteCommit);
+
+    // Assert: Should need update when commits differ
+    expect(needsUpdate).toBe(true);
+  });
+
+  it('should update when no local lock exists', async () => {
+    // Setup: Create skills.json only (no lock file)
+    fs.writeFileSync(
+      path.join(tempDir, 'skills.json'),
+      JSON.stringify({
+        skills: { 'test-skill': 'github:user/test-skill@main' },
+      }),
+    );
+
+    // Action: Call checkNeedsUpdate
+    const remoteCommit = 'abc123def456789012345678901234567890abcd';
+    const needsUpdate = await skillManager.checkNeedsUpdate('test-skill', remoteCommit);
+
+    // Assert: Should need update when no lock info exists
+    expect(needsUpdate).toBe(true);
+  });
+
+  it('should update when lock exists but has no commit hash', async () => {
+    // Setup: Create skills.json
+    fs.writeFileSync(
+      path.join(tempDir, 'skills.json'),
+      JSON.stringify({
+        skills: { 'test-skill': 'github:user/test-skill@main' },
+      }),
+    );
+
+    // Setup: Create skills.lock without commit hash (legacy format)
+    fs.writeFileSync(
+      path.join(tempDir, 'skills.lock'),
+      JSON.stringify({
+        lockfileVersion: 1,
+        skills: {
+          'test-skill': {
+            source: 'github:user/test-skill',
+            version: 'main',
+            ref: 'main',
+            resolved: 'https://github.com/user/test-skill.git',
+            // No commit field
+            installedAt: new Date().toISOString(),
+          },
+        },
+      }),
+    );
+
+    // Action: Call checkNeedsUpdate
+    const remoteCommit = 'abc123def456789012345678901234567890abcd';
+    const needsUpdate = await skillManager.checkNeedsUpdate('test-skill', remoteCommit);
+
+    // Assert: Should need update when no commit in lock
+    expect(needsUpdate).toBe(true);
+  });
+});
+
 // Integration tests (require network)
 describe('SkillManager integration', () => {
   it.skip('should install from real repository', async () => {

@@ -369,6 +369,75 @@ This is test content.
       expect(existsSync(path.join(result.canonicalPath as string, 'SKILL.md'))).toBe(true);
       expect(existsSync(path.join(result.canonicalPath as string, '.reskill-commit'))).toBe(false);
     });
+
+    it('should not copy README.md file by default', async () => {
+      // Create README.md in source
+      writeFileSync(path.join(sourceDir, 'README.md'), '# This is a README');
+
+      const result = await installer.installForAgent(sourceDir, 'test-skill', 'cursor', {
+        mode: 'copy',
+      });
+
+      expect(result.success).toBe(true);
+      expect(existsSync(path.join(result.path, 'SKILL.md'))).toBe(true);
+      expect(existsSync(path.join(result.path, 'README.md'))).toBe(false);
+    });
+
+    it('should not copy README.md file in symlink mode', async () => {
+      // Create README.md in source
+      writeFileSync(path.join(sourceDir, 'README.md'), '# This is a README');
+
+      const result = await installer.installForAgent(sourceDir, 'test-skill', 'cursor', {
+        mode: 'symlink',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.canonicalPath).toBeDefined();
+      expect(existsSync(path.join(result.canonicalPath as string, 'SKILL.md'))).toBe(true);
+      expect(existsSync(path.join(result.canonicalPath as string, 'README.md'))).toBe(false);
+    });
+
+    it('should not copy files starting with underscore', async () => {
+      // Create files starting with underscore
+      writeFileSync(path.join(sourceDir, '_private.md'), '# Private file');
+      writeFileSync(path.join(sourceDir, '_internal.txt'), 'internal content');
+
+      const result = await installer.installForAgent(sourceDir, 'test-skill', 'cursor', {
+        mode: 'copy',
+      });
+
+      expect(result.success).toBe(true);
+      expect(existsSync(path.join(result.path, 'SKILL.md'))).toBe(true);
+      expect(existsSync(path.join(result.path, '_private.md'))).toBe(false);
+      expect(existsSync(path.join(result.path, '_internal.txt'))).toBe(false);
+    });
+
+    it('should not copy metadata.json file', async () => {
+      // Create metadata.json in source
+      writeFileSync(path.join(sourceDir, 'metadata.json'), '{"internal": true}');
+
+      const result = await installer.installForAgent(sourceDir, 'test-skill', 'cursor', {
+        mode: 'copy',
+      });
+
+      expect(result.success).toBe(true);
+      expect(existsSync(path.join(result.path, 'SKILL.md'))).toBe(true);
+      expect(existsSync(path.join(result.path, 'metadata.json'))).toBe(false);
+    });
+
+    it('should copy other markdown files that are not excluded', async () => {
+      // Create other markdown files
+      writeFileSync(path.join(sourceDir, 'guide.md'), '# Guide');
+      writeFileSync(path.join(sourceDir, 'examples.md'), '# Examples');
+
+      const result = await installer.installForAgent(sourceDir, 'test-skill', 'cursor', {
+        mode: 'copy',
+      });
+
+      expect(result.success).toBe(true);
+      expect(existsSync(path.join(result.path, 'guide.md'))).toBe(true);
+      expect(existsSync(path.join(result.path, 'examples.md'))).toBe(true);
+    });
   });
 
   describe('edge cases', () => {
