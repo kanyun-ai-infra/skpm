@@ -10,6 +10,7 @@ import {
   remove,
 } from '../utils/fs.js';
 import { clone, getCurrentCommit } from '../utils/git.js';
+import { DEFAULT_EXCLUDE_FILES } from './installer.js';
 
 /**
  * CacheManager - Manage global skill cache
@@ -155,6 +156,9 @@ export class CacheManager {
 
   /**
    * Copy from cache to target directory
+   *
+   * Uses the same exclude rules as Installer to ensure consistency:
+   * - DEFAULT_EXCLUDE_FILES (README.md, metadata.json, .reskill-commit)
    */
   async copyTo(parsed: ParsedSkillRef, version: string, destPath: string): Promise<void> {
     const cached = await this.get(parsed, version);
@@ -168,7 +172,8 @@ export class CacheManager {
       remove(destPath);
     }
 
-    copyDir(cached.path, destPath, { exclude: ['.reskill-commit'] });
+    // Use same exclude rules as Installer for consistency
+    copyDir(cached.path, destPath, { exclude: DEFAULT_EXCLUDE_FILES });
   }
 
   /**
@@ -220,6 +225,56 @@ export class CacheManager {
     }
 
     return { totalSkills, registries };
+  }
+
+  /**
+   * Get the remote commit hash for a specific ref without cloning
+   *
+   * Uses `git ls-remote` to fetch the commit hash efficiently.
+   *
+   * @param repoUrl - Repository URL
+   * @param ref - Git reference (branch, tag, or commit)
+   * @returns Commit hash string
+   */
+  async getRemoteCommit(repoUrl: string, ref: string): Promise<string> {
+    const { exec } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const execAsync = promisify(exec);
+
+    try {
+      // Try to get commit for the ref
+      const { stdout } = await execAsync(`git ls-remote ${repoUrl} ${ref}`, {
+        encoding: 'utf-8',
+      });
+
+      if (stdout.trim()) {
+        const [commit] = stdout.trim().split('\t');
+        return commit;
+      }
+
+      // If ref is not found directly, try refs/heads/ and refs/tags/
+      const { stdout: allRefs } = await execAsync(`git ls-remote ${repoUrl}`, {
+        encoding: 'utf-8',
+      });
+
+      const lines = allRefs.trim().split('\n');
+      for (const line of lines) {
+        const [commit, refPath] = line.split('\t');
+        if (
+          refPath === `refs/heads/${ref}` ||
+          refPath === `refs/tags/${ref}` ||
+          refPath === ref
+        ) {
+          return commit;
+        }
+      }
+
+      // If still not found, return empty string (will trigger update)
+      return '';
+    } catch {
+      // On error, return empty string to trigger update
+      return '';
+    }
   }
 }
 

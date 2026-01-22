@@ -270,6 +270,25 @@ export class SkillManager {
   }
 
   /**
+   * Check if a skill needs to be updated by comparing local and remote commits
+   *
+   * @param name - Skill name
+   * @param remoteCommit - Remote commit hash to compare against
+   * @returns true if update is needed, false if already up to date
+   */
+  checkNeedsUpdate(name: string, remoteCommit: string): boolean {
+    const locked = this.lockManager.get(name);
+
+    // No lock info or no commit hash means we need to update
+    if (!locked?.commit) {
+      return true;
+    }
+
+    // Compare commits
+    return locked.commit !== remoteCommit;
+  }
+
+  /**
    * Update skill
    */
   async update(name?: string): Promise<InstalledSkill[]> {
@@ -283,6 +302,15 @@ export class SkillManager {
         return [];
       }
 
+      // Check if update is needed by getting remote commit first
+      const resolved = await this.resolver.resolve(ref);
+      const remoteCommit = await this.cache.getRemoteCommit(resolved.repoUrl, resolved.ref);
+
+      if (!this.checkNeedsUpdate(name, remoteCommit)) {
+        logger.info(`${name} is already up to date`);
+        return [];
+      }
+
       const skill = await this.install(ref, { force: true, save: false });
       updated.push(skill);
     } else {
@@ -290,6 +318,15 @@ export class SkillManager {
       const skills = this.config.getSkills();
       for (const [skillName, ref] of Object.entries(skills)) {
         try {
+          // Check if update is needed
+          const resolved = await this.resolver.resolve(ref);
+          const remoteCommit = await this.cache.getRemoteCommit(resolved.repoUrl, resolved.ref);
+
+          if (!this.checkNeedsUpdate(skillName, remoteCommit)) {
+            logger.info(`${skillName} is already up to date`);
+            continue;
+          }
+
           const skill = await this.install(ref, { force: true, save: false });
           updated.push(skill);
         } catch (error) {

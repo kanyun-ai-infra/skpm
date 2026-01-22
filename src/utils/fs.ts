@@ -69,16 +69,27 @@ export function remove(targetPath: string): void {
 
 /**
  * Copy directory recursively
+ *
+ * @param src - Source directory
+ * @param dest - Destination directory
+ * @param options.exclude - Array of filenames to exclude
+ * @param options.excludePrefix - Prefix for files to exclude (e.g., '_' to exclude _private.md)
  */
-export function copyDir(src: string, dest: string, options?: { exclude?: string[] }): void {
+export function copyDir(
+  src: string,
+  dest: string,
+  options?: { exclude?: string[]; excludePrefix?: string },
+): void {
   const exclude = options?.exclude || [];
+  const excludePrefix = options?.excludePrefix || '_';
 
   ensureDir(dest);
 
   const entries = fs.readdirSync(src, { withFileTypes: true });
 
   for (const entry of entries) {
-    if (exclude.includes(entry.name)) {
+    // Skip files in exclude list or starting with excludePrefix
+    if (exclude.includes(entry.name) || entry.name.startsWith(excludePrefix)) {
       continue;
     }
 

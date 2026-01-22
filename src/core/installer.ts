@@ -53,6 +53,17 @@ const AGENTS_DIR = '.agents';
 const SKILLS_SUBDIR = 'skills';
 
 /**
+ * Default files to exclude when copying skills
+ * These files are typically used for repository metadata and should not be copied to agent directories
+ */
+export const DEFAULT_EXCLUDE_FILES = ['README.md', 'metadata.json', '.reskill-commit'];
+
+/**
+ * Prefix for files that should be excluded (internal/private files)
+ */
+export const EXCLUDE_PREFIX = '_';
+
+/**
  * Sanitize filename to prevent path traversal attacks
  */
 function sanitizeName(name: string): string {
@@ -113,18 +124,22 @@ function remove(targetPath: string): void {
 }
 
 /**
- * Copy directory
+ * Copy directory with file exclusion
+ *
+ * By default excludes:
+ * - Files in DEFAULT_EXCLUDE_FILES (README.md, metadata.json, .reskill-commit)
+ * - Files starting with EXCLUDE_PREFIX ('_')
  */
 function copyDirectory(src: string, dest: string, options?: { exclude?: string[] }): void {
-  const exclude = new Set(options?.exclude || ['README.md', 'metadata.json', '.reskill-commit']);
+  const exclude = new Set(options?.exclude || DEFAULT_EXCLUDE_FILES);
 
   ensureDir(dest);
 
   const entries = fs.readdirSync(src, { withFileTypes: true });
 
   for (const entry of entries) {
-    // Skip files starting with _ and files in exclude list
-    if (exclude.has(entry.name) || entry.name.startsWith('_')) {
+    // Skip files starting with EXCLUDE_PREFIX and files in exclude list
+    if (exclude.has(entry.name) || entry.name.startsWith(EXCLUDE_PREFIX)) {
       continue;
     }
 

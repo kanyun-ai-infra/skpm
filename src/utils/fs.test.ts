@@ -157,6 +157,58 @@ describe('fs utilities', () => {
       expect(exists(path.join(destDir, 'keep.txt'))).toBe(true);
       expect(exists(path.join(destDir, '.git'))).toBe(false);
     });
+
+    it('should exclude files starting with underscore by default', () => {
+      const srcDir = path.join(tempDir, 'src');
+      const destDir = path.join(tempDir, 'dest');
+
+      fs.mkdirSync(srcDir);
+      fs.writeFileSync(path.join(srcDir, 'keep.txt'), 'keep');
+      fs.writeFileSync(path.join(srcDir, '_private.md'), 'private');
+      fs.writeFileSync(path.join(srcDir, '_internal.txt'), 'internal');
+      fs.mkdirSync(path.join(srcDir, '_hidden'));
+      fs.writeFileSync(path.join(srcDir, '_hidden', 'secret.txt'), 'secret');
+
+      copyDir(srcDir, destDir);
+
+      expect(exists(path.join(destDir, 'keep.txt'))).toBe(true);
+      expect(exists(path.join(destDir, '_private.md'))).toBe(false);
+      expect(exists(path.join(destDir, '_internal.txt'))).toBe(false);
+      expect(exists(path.join(destDir, '_hidden'))).toBe(false);
+    });
+
+    it('should allow custom excludePrefix', () => {
+      const srcDir = path.join(tempDir, 'src');
+      const destDir = path.join(tempDir, 'dest');
+
+      fs.mkdirSync(srcDir);
+      fs.writeFileSync(path.join(srcDir, 'keep.txt'), 'keep');
+      fs.writeFileSync(path.join(srcDir, '_underscore.md'), 'underscore');
+      fs.writeFileSync(path.join(srcDir, '~tilde.txt'), 'tilde');
+
+      // Use ~ as prefix instead of _
+      copyDir(srcDir, destDir, { excludePrefix: '~' });
+
+      expect(exists(path.join(destDir, 'keep.txt'))).toBe(true);
+      expect(exists(path.join(destDir, '_underscore.md'))).toBe(true);
+      expect(exists(path.join(destDir, '~tilde.txt'))).toBe(false);
+    });
+
+    it('should combine exclude list and excludePrefix', () => {
+      const srcDir = path.join(tempDir, 'src');
+      const destDir = path.join(tempDir, 'dest');
+
+      fs.mkdirSync(srcDir);
+      fs.writeFileSync(path.join(srcDir, 'keep.txt'), 'keep');
+      fs.writeFileSync(path.join(srcDir, 'README.md'), 'readme');
+      fs.writeFileSync(path.join(srcDir, '_private.md'), 'private');
+
+      copyDir(srcDir, destDir, { exclude: ['README.md'] });
+
+      expect(exists(path.join(destDir, 'keep.txt'))).toBe(true);
+      expect(exists(path.join(destDir, 'README.md'))).toBe(false);
+      expect(exists(path.join(destDir, '_private.md'))).toBe(false);
+    });
   });
 
   describe('listDir', () => {

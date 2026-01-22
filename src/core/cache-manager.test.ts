@@ -158,6 +158,77 @@ describe('CacheManager', () => {
       expect(fs.existsSync(path.join(destPath, 'SKILL.md'))).toBe(true);
       expect(fs.existsSync(path.join(destPath, 'helper.txt'))).toBe(true);
     });
+
+    it('should exclude .reskill-commit file', async () => {
+      const cachePath = cacheManager.getSkillCachePath(mockParsed, 'v1.0.0');
+      fs.mkdirSync(cachePath, { recursive: true });
+      fs.writeFileSync(path.join(cachePath, 'SKILL.md'), '# Test Skill');
+      fs.writeFileSync(path.join(cachePath, '.reskill-commit'), 'abc123');
+
+      const destPath = path.join(tempDir, 'dest-skill');
+      await cacheManager.copyTo(mockParsed, 'v1.0.0', destPath);
+
+      expect(fs.existsSync(path.join(destPath, 'SKILL.md'))).toBe(true);
+      expect(fs.existsSync(path.join(destPath, '.reskill-commit'))).toBe(false);
+    });
+
+    it('should exclude README.md file (consistent with Installer)', async () => {
+      const cachePath = cacheManager.getSkillCachePath(mockParsed, 'v1.0.0');
+      fs.mkdirSync(cachePath, { recursive: true });
+      fs.writeFileSync(path.join(cachePath, 'SKILL.md'), '# Test Skill');
+      fs.writeFileSync(path.join(cachePath, 'README.md'), '# README');
+      fs.writeFileSync(path.join(cachePath, '.reskill-commit'), 'abc123');
+
+      const destPath = path.join(tempDir, 'dest-skill');
+      await cacheManager.copyTo(mockParsed, 'v1.0.0', destPath);
+
+      expect(fs.existsSync(path.join(destPath, 'SKILL.md'))).toBe(true);
+      expect(fs.existsSync(path.join(destPath, 'README.md'))).toBe(false);
+    });
+
+    it('should exclude metadata.json file (consistent with Installer)', async () => {
+      const cachePath = cacheManager.getSkillCachePath(mockParsed, 'v1.0.0');
+      fs.mkdirSync(cachePath, { recursive: true });
+      fs.writeFileSync(path.join(cachePath, 'SKILL.md'), '# Test Skill');
+      fs.writeFileSync(path.join(cachePath, 'metadata.json'), '{"internal": true}');
+      fs.writeFileSync(path.join(cachePath, '.reskill-commit'), 'abc123');
+
+      const destPath = path.join(tempDir, 'dest-skill');
+      await cacheManager.copyTo(mockParsed, 'v1.0.0', destPath);
+
+      expect(fs.existsSync(path.join(destPath, 'SKILL.md'))).toBe(true);
+      expect(fs.existsSync(path.join(destPath, 'metadata.json'))).toBe(false);
+    });
+
+    it('should exclude files starting with underscore (consistent with Installer)', async () => {
+      const cachePath = cacheManager.getSkillCachePath(mockParsed, 'v1.0.0');
+      fs.mkdirSync(cachePath, { recursive: true });
+      fs.writeFileSync(path.join(cachePath, 'SKILL.md'), '# Test Skill');
+      fs.writeFileSync(path.join(cachePath, '_private.md'), 'private');
+      fs.writeFileSync(path.join(cachePath, '.reskill-commit'), 'abc123');
+
+      const destPath = path.join(tempDir, 'dest-skill');
+      await cacheManager.copyTo(mockParsed, 'v1.0.0', destPath);
+
+      expect(fs.existsSync(path.join(destPath, 'SKILL.md'))).toBe(true);
+      expect(fs.existsSync(path.join(destPath, '_private.md'))).toBe(false);
+    });
+  });
+
+  describe('getRemoteCommit', () => {
+    it('should return empty string when git command fails', async () => {
+      // Use invalid URL to trigger failure
+      const commit = await cacheManager.getRemoteCommit('invalid://url', 'main');
+      expect(commit).toBe('');
+    });
+
+    it.skip('should return empty string for non-existent repository', async () => {
+      const commit = await cacheManager.getRemoteCommit(
+        'https://github.com/nonexistent-user-xyz/nonexistent-repo-abc.git',
+        'main',
+      );
+      expect(commit).toBe('');
+    });
   });
 
   describe('subPath handling', () => {
