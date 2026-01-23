@@ -7,6 +7,26 @@ const execAsync = promisify(exec);
  * Git utilities
  */
 
+/**
+ * SSH command with auto-accept for new host keys
+ * Uses StrictHostKeyChecking=accept-new which:
+ * - Automatically accepts keys for hosts not in known_hosts
+ * - Still rejects connections if a known host's key has changed (security)
+ */
+const GIT_SSH_COMMAND = 'ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes';
+
+/**
+ * Get environment variables for git commands that access remote repositories
+ */
+function getGitEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    GIT_SSH_COMMAND,
+    // Disable interactive prompts for HTTPS as well
+    GIT_TERMINAL_PROMPT: '0',
+  };
+}
+
 export interface GitTag {
   name: string;
   commit: string;
@@ -88,6 +108,7 @@ export function gitSync(args: string[], cwd?: string): string {
     cwd,
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
+    env: getGitEnv(),
   });
   return result.trim();
 }
@@ -99,6 +120,7 @@ export async function git(args: string[], cwd?: string): Promise<string> {
   const { stdout } = await execAsync(`git ${args.join(' ')}`, {
     cwd,
     encoding: 'utf-8',
+    env: getGitEnv(),
   });
   return stdout.trim();
 }
