@@ -13,12 +13,13 @@ const execAsync = promisify(exec);
  * - Automatically accepts keys for hosts not in known_hosts
  * - Still rejects connections if a known host's key has changed (security)
  */
-const GIT_SSH_COMMAND = 'ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes';
+export const GIT_SSH_COMMAND = 'ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes';
 
 /**
  * Get environment variables for git commands that access remote repositories
+ * Configures SSH to auto-accept new host keys and disables interactive prompts
  */
-function getGitEnv(): NodeJS.ProcessEnv {
+export function getGitEnv(): NodeJS.ProcessEnv {
   return {
     ...process.env,
     GIT_SSH_COMMAND,

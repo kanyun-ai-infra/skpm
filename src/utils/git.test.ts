@@ -1,10 +1,46 @@
 import { describe, expect, it } from 'vitest';
-import { buildRepoUrl, GitCloneError, getRepoNameFromUrl, isGitUrl, parseGitUrl } from './git.js';
+import {
+  buildRepoUrl,
+  getGitEnv,
+  GitCloneError,
+  getRepoNameFromUrl,
+  GIT_SSH_COMMAND,
+  isGitUrl,
+  parseGitUrl,
+} from './git.js';
 
 // Note: Most git functions require actual git operations
 // Here we test the pure functions and mock-able parts
 
 describe('git utilities', () => {
+  describe('GIT_SSH_COMMAND', () => {
+    it('should include StrictHostKeyChecking=accept-new to auto-accept new host keys', () => {
+      expect(GIT_SSH_COMMAND).toContain('StrictHostKeyChecking=accept-new');
+    });
+
+    it('should include BatchMode=yes to fail fast without interactive prompts', () => {
+      expect(GIT_SSH_COMMAND).toContain('BatchMode=yes');
+    });
+  });
+
+  describe('getGitEnv', () => {
+    it('should return environment with GIT_SSH_COMMAND set', () => {
+      const env = getGitEnv();
+      expect(env.GIT_SSH_COMMAND).toBe(GIT_SSH_COMMAND);
+    });
+
+    it('should disable HTTPS terminal prompts', () => {
+      const env = getGitEnv();
+      expect(env.GIT_TERMINAL_PROMPT).toBe('0');
+    });
+
+    it('should include existing process.env variables', () => {
+      const env = getGitEnv();
+      // PATH should be inherited from process.env
+      expect(env.PATH).toBe(process.env.PATH);
+    });
+  });
+
   describe('buildRepoUrl', () => {
     it('should build github URL', () => {
       expect(buildRepoUrl('github', 'user/repo')).toBe('https://github.com/user/repo');
