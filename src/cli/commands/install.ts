@@ -233,16 +233,15 @@ async function promptAgentSelection(
  * Resolve installation scope (global vs project)
  */
 async function resolveInstallScope(ctx: InstallContext): Promise<boolean> {
-  const { options, hasSkillsJson, skipConfirm } = ctx;
+  const { options, isReinstallAll, skipConfirm } = ctx;
 
   // Explicit --global flag
   if (options.global !== undefined) {
     return options.global;
   }
 
-  // Skip prompt if skills.json exists (default to project)
-  if (hasSkillsJson) {
-    p.log.info(`Found ${chalk.cyan('skills.json')}, installing to project`);
+  // Skip prompt for reinstall-all (always project scope)
+  if (isReinstallAll) {
     return false;
   }
 

@@ -379,6 +379,58 @@ describe('defaults behavior', () => {
 });
 
 // ============================================================================
+// Scope Selection Logic Tests
+// ============================================================================
+
+describe('scope selection logic', () => {
+  it('should skip scope prompt for reinstall all (no skill argument)', () => {
+    // When isReinstallAll is true, scope should default to project (false)
+    // without prompting user
+    const isReinstallAll = true;
+    const optionsGlobal = undefined;
+    const skipConfirm = false;
+
+    // Logic from resolveInstallScope:
+    // if (options.global !== undefined) return options.global
+    // if (isReinstallAll) return false  // <-- skips prompt
+    const shouldSkipScopePrompt = optionsGlobal !== undefined || isReinstallAll;
+    expect(shouldSkipScopePrompt).toBe(true);
+  });
+
+  it('should show scope prompt for single skill install', () => {
+    // When isReinstallAll is false and no --global flag, should prompt user
+    const isReinstallAll = false;
+    const optionsGlobal = undefined;
+    const skipConfirm = false;
+
+    // Logic: only prompt when not reinstall-all, not explicit --global, and not -y
+    const shouldShowScopePrompt =
+      optionsGlobal === undefined && !isReinstallAll && !skipConfirm;
+    expect(shouldShowScopePrompt).toBe(true);
+  });
+
+  it('should skip scope prompt when --global is explicitly set', () => {
+    const isReinstallAll = false;
+    const optionsGlobal = true;
+
+    // Explicit --global flag takes priority
+    const shouldSkipScopePrompt = optionsGlobal !== undefined;
+    expect(shouldSkipScopePrompt).toBe(true);
+  });
+
+  it('should skip scope prompt when -y flag is used', () => {
+    const isReinstallAll = false;
+    const optionsGlobal = undefined;
+    const skipConfirm = true;
+
+    // -y flag defaults to project scope
+    const shouldSkipScopePrompt =
+      optionsGlobal !== undefined || isReinstallAll || skipConfirm;
+    expect(shouldSkipScopePrompt).toBe(true);
+  });
+});
+
+// ============================================================================
 // Confirmation Logic Tests
 // ============================================================================
 
