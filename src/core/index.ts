@@ -10,6 +10,10 @@ export {
 } from './agent-registry.js';
 export { CacheManager } from './cache-manager.js';
 export { ConfigLoader, DEFAULT_REGISTRIES } from './config-loader.js';
+/**
+ * Type representing well-known registry names
+ */
+export type WellKnownRegistry = keyof typeof import('./config-loader.js').DEFAULT_REGISTRIES;
 export type { RegistryResolver } from './git-resolver.js';
 export { GitResolver } from './git-resolver.js';
 export type { InstallerOptions, InstallMode, InstallResult } from './installer.js';

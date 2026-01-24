@@ -546,5 +546,30 @@ describe('ConfigLoader', () => {
       expect(loader.normalizeSkillRef('https://gitlab.company.com/team/monorepo/skills/pdf@v1.0.0'))
         .toBe('internal:team/monorepo/skills/pdf@v1.0.0');
     });
+
+    it('should correctly parse SSH URL with .git suffix and version', () => {
+      const loader = new ConfigLoader(tempDir);
+      // This tests the regex capture group fix for git@host:user/repo.git@v1.0.0
+      expect(loader.normalizeSkillRef('git@github.com:user/repo.git@v1.0.0'))
+        .toBe('github:user/repo@v1.0.0');
+    });
+
+    it('should correctly parse SSH URL without .git suffix', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('git@github.com:user/repo@v1.0.0'))
+        .toBe('github:user/repo@v1.0.0');
+    });
+
+    it('should correctly parse SSH URL with .git suffix but no version', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('git@github.com:user/repo.git'))
+        .toBe('github:user/repo');
+    });
+
+    it('should correctly parse SSH URL without .git suffix and no version', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('git@github.com:user/repo'))
+        .toBe('github:user/repo');
+    });
   });
 });

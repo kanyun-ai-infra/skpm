@@ -371,15 +371,17 @@ export class ConfigLoader {
   private normalizeGitSshUrl(ref: string): string {
     // Parse: git@host:owner/repo.git[@version] or git@host:owner/repo[@version]
     // The .git suffix and @version are both optional
-    const match = ref.match(/^git@([^:]+):(.+?)(?:\.git)?(@[^@]+)?$/);
+    // Use greedy match for repoPath (.+) to ensure .git is captured as part of the path,
+    // then explicitly remove it. This avoids issues with non-greedy matching and optional groups.
+    const match = ref.match(/^git@([^:]+):(.+?)(@[^@]+)?$/);
     if (!match) {
       return ref;
     }
 
-    let [, host, repoPath, version = ''] = match;
+    const [, host, rawRepoPath, version = ''] = match;
 
-    // Clean up the path - remove .git suffix if captured
-    repoPath = repoPath.replace(/\.git$/, '');
+    // Remove .git suffix if present
+    const repoPath = rawRepoPath.replace(/\.git$/, '');
 
     const testUrl = `https://${host}`;
 
@@ -421,9 +423,17 @@ export class ConfigLoader {
    * Add registry to configuration
    *
    * Only adds if the registry doesn't already exist.
+   * Note: This method requires config to be loaded first via load() or create().
+   * If config is not loaded, this method is a no-op (silent return) since it's
+   * typically called as a side effect of addSkill() which handles config loading.
+   *
+   * @param name - Registry name (e.g., 'github', 'gitlab', 'internal')
+   * @param url - Registry URL (e.g., 'https://github.com')
    */
   addRegistry(name: string, url: string): void {
     if (!this.config) {
+      // Config not loaded - this is expected when called before load()/create()
+      // Callers like addSkill() ensure config is loaded before calling this
       return;
     }
 
