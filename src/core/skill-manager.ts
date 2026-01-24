@@ -1,22 +1,22 @@
 import * as path from 'node:path';
 import type { InstalledSkill, InstallOptions, SkillJson } from '../types/index.js';
 import {
-  ensureDir,
-  exists,
-  getGlobalSkillsDir,
-  getRealPath,
-  isDirectory,
-  isSymlink,
-  listDir,
-  readJson,
-  remove,
+    ensureDir,
+    exists,
+    getGlobalSkillsDir,
+    getRealPath,
+    isDirectory,
+    isSymlink,
+    listDir,
+    readJson,
+    remove,
 } from '../utils/fs.js';
 import { logger } from '../utils/logger.js';
 import {
-  agents,
-  detectInstalledAgents,
-  isValidAgentType,
-  type AgentType,
+    agents,
+    detectInstalledAgents,
+    isValidAgentType,
+    type AgentType,
 } from './agent-registry.js';
 import { CacheManager } from './cache-manager.js';
 import { ConfigLoader } from './config-loader.js';
@@ -56,7 +56,10 @@ export class SkillManager {
     this.config = new ConfigLoader(this.projectRoot);
     this.lockManager = new LockManager(this.projectRoot);
     this.cache = new CacheManager();
-    this.resolver = new GitResolver();
+    // Pass registry resolver from ConfigLoader to GitResolver
+    this.resolver = new GitResolver('github', undefined, (registryName: string) =>
+      this.config.getRegistryUrl(registryName),
+    );
   }
 
   /**
@@ -211,7 +214,9 @@ export class SkillManager {
     // Update skills.json (project mode only)
     if (!this.isGlobal && save) {
       this.config.ensureExists();
-      this.config.addSkill(skillName, ref);
+      // Normalize the reference to use registry shorthand if possible
+      const normalizedRef = this.config.normalizeSkillRef(ref);
+      this.config.addSkill(skillName, normalizedRef);
     }
 
     const displayVersion = semanticVersion !== gitRef ? `${semanticVersion} (${gitRef})` : gitRef;
@@ -619,7 +624,9 @@ export class SkillManager {
     // Update skills.json (project mode only)
     if (!this.isGlobal && save) {
       this.config.ensureExists();
-      this.config.addSkill(skillName, ref);
+      // Normalize the reference to use registry shorthand if possible
+      const normalizedRef = this.config.normalizeSkillRef(ref);
+      this.config.addSkill(skillName, normalizedRef);
     }
 
     // Count results

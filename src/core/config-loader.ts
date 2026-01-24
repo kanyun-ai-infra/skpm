@@ -11,6 +11,9 @@ import { exists, getSkillsJsonPath, readJson, writeJson } from '../utils/fs.js';
  */
 const DEFAULT_SKILLS_JSON: SkillsJson = {
   skills: {},
+  registries: {
+    github: 'https://github.com',
+  },
   defaults: {
     installDir: '.skills',
   },
@@ -170,6 +173,11 @@ export class ConfigLoader {
       ...DEFAULT_SKILLS_JSON,
       ...options,
       skills: options?.skills ?? {},
+      // Deep copy registries to avoid mutating the default object
+      registries: {
+        ...DEFAULT_SKILLS_JSON.registries,
+        ...options?.registries,
+      },
       defaults: {
         ...DEFAULT_SKILLS_JSON.defaults,
         ...options?.defaults,
@@ -249,20 +257,215 @@ export class ConfigLoader {
     return `https://${registryName}`;
   }
 
+  /**
+   * Find registry name for a given URL
+   *
+   * Reverse lookup: finds which registry (if any) matches the URL.
+   * Custom registries are checked first, then well-known registries.
+   *
+   * @param url - The URL to match (e.g., "https://gitlab.company.com/team/tool")
+   * @returns The registry name if found, or undefined
+   */
+  findRegistryForUrl(url: string): string | undefined {
+    const config = this.getConfigOrDefault();
+
+    // Normalize URL - remove trailing slash
+    const normalizedUrl = url.replace(/\/$/, '');
+
+    // Check custom registries first (higher priority)
+    if (config.registries) {
+      for (const [name, registryUrl] of Object.entries(config.registries)) {
+        const normalizedRegistryUrl = registryUrl.replace(/\/$/, '');
+        if (normalizedUrl.startsWith(normalizedRegistryUrl)) {
+          return name;
+        }
+      }
+    }
+
+    // Check well-known registries
+    for (const [name, registryUrl] of Object.entries(DEFAULT_REGISTRIES)) {
+      const normalizedRegistryUrl = registryUrl.replace(/\/$/, '');
+      if (normalizedUrl.startsWith(normalizedRegistryUrl)) {
+        return name;
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Normalize a skill reference to use registry shorthand if possible
+   *
+   * Converts full URLs to registry format when they match a configured registry.
+   * E.g., "https://gitlab.company.com/team/tool@v1.0.0" → "internal:team/tool@v1.0.0"
+   *       (if "internal": "https://gitlab.company.com" is configured)
+   *
+   * @param ref - The skill reference to normalize
+   * @returns Normalized reference using registry shorthand, or original if no match
+   */
+  normalizeSkillRef(ref: string): string {
+    // Check if it's an SSH URL (git@...) - must check first as it contains ':'
+    if (ref.startsWith('git@')) {
+      return this.normalizeGitSshUrl(ref);
+    }
+
+    // Check if it's an HTTPS URL
+    if (ref.startsWith('https://') || ref.startsWith('http://')) {
+      return this.normalizeHttpsUrl(ref);
+    }
+
+    // Check if it's already in registry format (contains : but not a URL)
+    // At this point we've excluded git@ and http(s):// URLs
+    if (ref.includes(':')) {
+      return ref;
+    }
+
+    return ref;
+  }
+
+  /**
+   * Normalize an HTTPS URL to registry format
+   */
+  private normalizeHttpsUrl(ref: string): string {
+    // Extract version part if present
+    let url = ref;
+    let version = '';
+
+    // Handle .git suffix with version
+    const gitVersionMatch = ref.match(/^(.+\.git)(@.+)$/);
+    if (gitVersionMatch) {
+      url = gitVersionMatch[1];
+      version = gitVersionMatch[2];
+    } else {
+      // Handle URL without .git suffix
+      const versionMatch = ref.match(/^(.+?)(@[^@]+)$/);
+      if (versionMatch && !versionMatch[1].includes('@')) {
+        url = versionMatch[1];
+        version = versionMatch[2];
+      }
+    }
+
+    // Find matching registry
+    const registryName = this.findRegistryForUrl(url);
+    if (!registryName) {
+      return ref;
+    }
+
+    const registryUrl = this.getRegistryUrl(registryName).replace(/\/$/, '');
+
+    // Extract the path after registry URL
+    let path = url.replace(registryUrl, '').replace(/^\//, '');
+    // Remove .git suffix if present
+    path = path.replace(/\.git$/, '');
+
+    if (!path) {
+      return ref;
+    }
+
+    return `${registryName}:${path}${version}`;
+  }
+
+  /**
+   * Normalize a Git SSH URL to registry format
+   */
+  private normalizeGitSshUrl(ref: string): string {
+    // Parse: git@host:owner/repo.git[@version] or git@host:owner/repo[@version]
+    // The .git suffix and @version are both optional
+    // Use greedy match for repoPath (.+) to ensure .git is captured as part of the path,
+    // then explicitly remove it. This avoids issues with non-greedy matching and optional groups.
+    const match = ref.match(/^git@([^:]+):(.+?)(@[^@]+)?$/);
+    if (!match) {
+      return ref;
+    }
+
+    const [, host, rawRepoPath, version = ''] = match;
+
+    // Remove .git suffix if present
+    const repoPath = rawRepoPath.replace(/\.git$/, '');
+
+    const testUrl = `https://${host}`;
+
+    // Find matching registry
+    const registryName = this.findRegistryForUrl(testUrl);
+    if (!registryName) {
+      return ref;
+    }
+
+    return `${registryName}:${repoPath}${version}`;
+  }
+
   // ==========================================================================
   // Skills Management
   // ==========================================================================
 
   /**
    * Add skill to configuration
+   *
+   * Also auto-adds the registry to the registries field if it's a well-known registry.
    */
   addSkill(name: string, ref: string): void {
     this.ensureConfigLoaded();
 
     if (this.config) {
       this.config.skills[name] = ref;
+
+      // Auto-add registry if it's a well-known registry
+      const registryName = this.extractRegistryFromRef(ref);
+      if (registryName && DEFAULT_REGISTRIES[registryName]) {
+        this.addRegistry(registryName, DEFAULT_REGISTRIES[registryName]);
+      }
+
       this.save();
     }
+  }
+
+  /**
+   * Add registry to configuration
+   *
+   * Only adds if the registry doesn't already exist.
+   * Note: This method requires config to be loaded first via load() or create().
+   * If config is not loaded, this method is a no-op (silent return) since it's
+   * typically called as a side effect of addSkill() which handles config loading.
+   *
+   * @param name - Registry name (e.g., 'github', 'gitlab', 'internal')
+   * @param url - Registry URL (e.g., 'https://github.com')
+   */
+  addRegistry(name: string, url: string): void {
+    if (!this.config) {
+      // Config not loaded - this is expected when called before load()/create()
+      // Callers like addSkill() ensure config is loaded before calling this
+      return;
+    }
+
+    if (!this.config.registries) {
+      this.config.registries = {};
+    }
+
+    // Don't overwrite existing registries
+    if (!this.config.registries[name]) {
+      this.config.registries[name] = url;
+    }
+  }
+
+  /**
+   * Extract registry name from a skill reference
+   *
+   * @example
+   * extractRegistryFromRef('github:user/repo@v1.0.0') // 'github'
+   * extractRegistryFromRef('gitlab:user/repo') // 'gitlab'
+   * extractRegistryFromRef('https://github.com/user/repo') // undefined
+   */
+  private extractRegistryFromRef(ref: string): string | undefined {
+    // Check for registry format: registry:path[@version]
+    const match = ref.match(/^([a-zA-Z][a-zA-Z0-9-]*):(.+)$/);
+    if (match) {
+      const registryName = match[1];
+      // Exclude URL protocols (http, https, git, ssh)
+      if (!['http', 'https', 'git', 'ssh'].includes(registryName.toLowerCase())) {
+        return registryName;
+      }
+    }
+    return undefined;
   }
 
   /**

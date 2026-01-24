@@ -276,6 +276,7 @@ export function updateMockSkillVersion(
  * @param dir - Directory to create the file in
  * @param skills - Skills to include in the configuration
  * @param defaults - Default options
+ * @param registries - Custom registry configuration
  */
 export function setupSkillsJson(
   dir: string,
@@ -285,8 +286,9 @@ export function setupSkillsJson(
     installMode?: 'symlink' | 'copy';
     targetAgents?: string[];
   } = {},
+  registries?: Record<string, string>,
 ): void {
-  const config = {
+  const config: Record<string, unknown> = {
     skills,
     defaults: {
       installDir: defaults.installDir || '.skills',
@@ -294,6 +296,9 @@ export function setupSkillsJson(
       ...(defaults.targetAgents && { targetAgents: defaults.targetAgents }),
     },
   };
+  if (registries) {
+    config.registries = registries;
+  }
   fs.writeFileSync(path.join(dir, 'skills.json'), JSON.stringify(config, null, 2));
 }
 

@@ -65,6 +65,9 @@ describe('init command', () => {
       // Verify complete structure
       expect(config).toEqual({
         skills: {},
+        registries: {
+          github: 'https://github.com',
+        },
         defaults: {
           installDir: '.skills',
         },

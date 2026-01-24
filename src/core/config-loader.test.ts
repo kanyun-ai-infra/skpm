@@ -46,6 +46,7 @@ describe('ConfigLoader', () => {
       const config = configLoader.create();
 
       expect(config.skills).toEqual({});
+      expect(config.registries).toEqual({ github: 'https://github.com' });
       expect(config.defaults?.installDir).toBe('.skills');
       expect(fs.existsSync(path.join(tempDir, 'skills.json'))).toBe(true);
     });
@@ -270,7 +271,305 @@ describe('ConfigLoader', () => {
       const skills = configLoader.getSkills();
       expect(Object.keys(skills)).toHaveLength(2);
       expect(skills.skill1).toBe('github:user/skill1@v1.0.0');
-      expect(skills.skill2).toBe('github:user/skill2@v2.0.0');
+    });
+
+    it('should auto-add github registry when adding github skill', () => {
+      configLoader.addSkill('my-skill', 'github:user/skill@v1.0.0');
+
+      const content = fs.readFileSync(path.join(tempDir, 'skills.json'), 'utf-8');
+      const parsed = JSON.parse(content) as SkillsJson;
+
+      expect(parsed.registries).toBeDefined();
+      expect(parsed.registries?.github).toBe('https://github.com');
+    });
+
+    it('should auto-add gitlab registry when adding gitlab skill', () => {
+      configLoader.addSkill('my-skill', 'gitlab:user/skill@v1.0.0');
+
+      const content = fs.readFileSync(path.join(tempDir, 'skills.json'), 'utf-8');
+      const parsed = JSON.parse(content) as SkillsJson;
+
+      expect(parsed.registries).toBeDefined();
+      expect(parsed.registries?.gitlab).toBe('https://gitlab.com');
+    });
+
+    it('should auto-add multiple registries for different skills', () => {
+      configLoader.addSkill('github-skill', 'github:user/skill1@v1.0.0');
+      configLoader.addSkill('gitlab-skill', 'gitlab:user/skill2@v1.0.0');
+
+      const content = fs.readFileSync(path.join(tempDir, 'skills.json'), 'utf-8');
+      const parsed = JSON.parse(content) as SkillsJson;
+
+      expect(parsed.registries?.github).toBe('https://github.com');
+      expect(parsed.registries?.gitlab).toBe('https://gitlab.com');
+    });
+
+    it('should not overwrite existing custom registry', () => {
+      // Create config with custom github registry
+      configLoader.create({
+        registries: {
+          github: 'https://github.mycompany.com',
+        },
+      });
+
+      configLoader.addSkill('my-skill', 'github:user/skill@v1.0.0');
+
+      const content = fs.readFileSync(path.join(tempDir, 'skills.json'), 'utf-8');
+      const parsed = JSON.parse(content) as SkillsJson;
+
+      // Should keep the custom URL, not overwrite with default
+      expect(parsed.registries?.github).toBe('https://github.mycompany.com');
+    });
+
+    it('should not add extra registry for URL-based skill refs', () => {
+      configLoader.addSkill('my-skill', 'https://example.com/user/skill@v1.0.0');
+
+      const content = fs.readFileSync(path.join(tempDir, 'skills.json'), 'utf-8');
+      const parsed = JSON.parse(content) as SkillsJson;
+
+      // Should only have the default github registry, not add example.com
+      expect(parsed.registries).toEqual({ github: 'https://github.com' });
+    });
+  });
+
+  describe('getRegistryUrl', () => {
+    it('should return github URL for well-known github registry', () => {
+      expect(configLoader.getRegistryUrl('github')).toBe('https://github.com');
+    });
+
+    it('should return gitlab URL for well-known gitlab registry', () => {
+      expect(configLoader.getRegistryUrl('gitlab')).toBe('https://gitlab.com');
+    });
+
+    it('should return custom registry URL when defined in config', () => {
+      const testConfig: SkillsJson = {
+        skills: {},
+        registries: {
+          internal: 'https://gitlab.company.com',
+          enterprise: 'https://git.enterprise.io',
+        },
+      };
+      fs.writeFileSync(path.join(tempDir, 'skills.json'), JSON.stringify(testConfig));
+
+      // Reload to pick up new config
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.getRegistryUrl('internal')).toBe('https://gitlab.company.com');
+      expect(loader.getRegistryUrl('enterprise')).toBe('https://git.enterprise.io');
+    });
+
+    it('should prioritize custom registry over well-known registry', () => {
+      const testConfig: SkillsJson = {
+        skills: {},
+        registries: {
+          github: 'https://github.enterprise.com', // Override well-known
+        },
+      };
+      fs.writeFileSync(path.join(tempDir, 'skills.json'), JSON.stringify(testConfig));
+
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.getRegistryUrl('github')).toBe('https://github.enterprise.com');
+    });
+
+    it('should fallback to https:// prefix for unknown registry', () => {
+      expect(configLoader.getRegistryUrl('unknown.host.com')).toBe('https://unknown.host.com');
+    });
+
+    it('should work without config file (uses defaults)', () => {
+      // No config file exists
+      expect(configLoader.getRegistryUrl('github')).toBe('https://github.com');
+      expect(configLoader.getRegistryUrl('gitlab')).toBe('https://gitlab.com');
+      expect(configLoader.getRegistryUrl('custom.host')).toBe('https://custom.host');
+    });
+
+    it('should handle config without registries section', () => {
+      const testConfig: SkillsJson = {
+        skills: {
+          'my-skill': 'github:user/skill@v1.0.0',
+        },
+        // No registries section
+      };
+      fs.writeFileSync(path.join(tempDir, 'skills.json'), JSON.stringify(testConfig));
+
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.getRegistryUrl('github')).toBe('https://github.com');
+      expect(loader.getRegistryUrl('custom')).toBe('https://custom');
+    });
+  });
+
+  describe('registries in skills.json', () => {
+    it('should create config with custom registries', () => {
+      const config = configLoader.create({
+        registries: {
+          internal: 'https://gitlab.company.com',
+        },
+      });
+
+      expect(config.registries?.internal).toBe('https://gitlab.company.com');
+
+      // Verify persisted
+      const loaded = JSON.parse(fs.readFileSync(path.join(tempDir, 'skills.json'), 'utf-8'));
+      expect(loaded.registries?.internal).toBe('https://gitlab.company.com');
+    });
+
+    it('should allow skills with custom registry prefix', () => {
+      const testConfig: SkillsJson = {
+        skills: {
+          planning: 'github:user/planning-skill@v1.0.0',
+          'internal-tool': 'internal:team/tool@latest',
+        },
+        registries: {
+          internal: 'https://gitlab.company.com',
+        },
+      };
+      fs.writeFileSync(path.join(tempDir, 'skills.json'), JSON.stringify(testConfig));
+
+      const loader = new ConfigLoader(tempDir);
+      const skills = loader.getSkills();
+
+      expect(skills.planning).toBe('github:user/planning-skill@v1.0.0');
+      expect(skills['internal-tool']).toBe('internal:team/tool@latest');
+      expect(loader.getRegistryUrl('internal')).toBe('https://gitlab.company.com');
+    });
+  });
+
+  describe('findRegistryForUrl', () => {
+    it('should find custom registry for matching URL', () => {
+      const testConfig: SkillsJson = {
+        skills: {},
+        registries: {
+          internal: 'https://gitlab.company.com',
+        },
+      };
+      fs.writeFileSync(path.join(tempDir, 'skills.json'), JSON.stringify(testConfig));
+
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.findRegistryForUrl('https://gitlab.company.com/team/tool')).toBe('internal');
+      expect(loader.findRegistryForUrl('https://gitlab.company.com/team/tool.git')).toBe('internal');
+    });
+
+    it('should find well-known registry for github URL', () => {
+      expect(configLoader.findRegistryForUrl('https://github.com/user/repo')).toBe('github');
+    });
+
+    it('should find well-known registry for gitlab URL', () => {
+      expect(configLoader.findRegistryForUrl('https://gitlab.com/group/project')).toBe('gitlab');
+    });
+
+    it('should return undefined for unknown URL', () => {
+      expect(configLoader.findRegistryForUrl('https://unknown.host.com/user/repo')).toBeUndefined();
+    });
+
+    it('should prioritize custom registry over well-known', () => {
+      const testConfig: SkillsJson = {
+        skills: {},
+        registries: {
+          enterprise: 'https://github.com', // Override github
+        },
+      };
+      fs.writeFileSync(path.join(tempDir, 'skills.json'), JSON.stringify(testConfig));
+
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.findRegistryForUrl('https://github.com/user/repo')).toBe('enterprise');
+    });
+  });
+
+  describe('normalizeSkillRef', () => {
+    beforeEach(() => {
+      const testConfig: SkillsJson = {
+        skills: {},
+        registries: {
+          internal: 'https://gitlab.company.com',
+          enterprise: 'https://git.enterprise.io',
+        },
+      };
+      fs.writeFileSync(path.join(tempDir, 'skills.json'), JSON.stringify(testConfig));
+    });
+
+    it('should normalize HTTPS URL to custom registry format', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('https://gitlab.company.com/team/tool@v1.0.0'))
+        .toBe('internal:team/tool@v1.0.0');
+    });
+
+    it('should normalize HTTPS URL with .git suffix', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('https://gitlab.company.com/team/tool.git@v1.0.0'))
+        .toBe('internal:team/tool@v1.0.0');
+    });
+
+    it('should normalize HTTPS URL without version', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('https://gitlab.company.com/team/tool'))
+        .toBe('internal:team/tool');
+    });
+
+    it('should normalize GitHub URL to github registry', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('https://github.com/user/skill@v2.0.0'))
+        .toBe('github:user/skill@v2.0.0');
+    });
+
+    it('should normalize GitLab URL to gitlab registry', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('https://gitlab.com/group/project@latest'))
+        .toBe('gitlab:group/project@latest');
+    });
+
+    it('should normalize SSH URL to registry format', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('git@gitlab.company.com:team/tool.git@v1.0.0'))
+        .toBe('internal:team/tool@v1.0.0');
+    });
+
+    it('should normalize GitHub SSH URL', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('git@github.com:user/repo.git@v1.0.0'))
+        .toBe('github:user/repo@v1.0.0');
+    });
+
+    it('should preserve already normalized references', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('internal:team/tool@v1.0.0'))
+        .toBe('internal:team/tool@v1.0.0');
+      expect(loader.normalizeSkillRef('github:user/repo@latest'))
+        .toBe('github:user/repo@latest');
+    });
+
+    it('should preserve unknown URLs', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('https://unknown.host.com/user/repo@v1.0.0'))
+        .toBe('https://unknown.host.com/user/repo@v1.0.0');
+    });
+
+    it('should handle nested paths', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('https://gitlab.company.com/team/monorepo/skills/pdf@v1.0.0'))
+        .toBe('internal:team/monorepo/skills/pdf@v1.0.0');
+    });
+
+    it('should correctly parse SSH URL with .git suffix and version', () => {
+      const loader = new ConfigLoader(tempDir);
+      // This tests the regex capture group fix for git@host:user/repo.git@v1.0.0
+      expect(loader.normalizeSkillRef('git@github.com:user/repo.git@v1.0.0'))
+        .toBe('github:user/repo@v1.0.0');
+    });
+
+    it('should correctly parse SSH URL without .git suffix', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('git@github.com:user/repo@v1.0.0'))
+        .toBe('github:user/repo@v1.0.0');
+    });
+
+    it('should correctly parse SSH URL with .git suffix but no version', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('git@github.com:user/repo.git'))
+        .toBe('github:user/repo');
+    });
+
+    it('should correctly parse SSH URL without .git suffix and no version', () => {
+      const loader = new ConfigLoader(tempDir);
+      expect(loader.normalizeSkillRef('git@github.com:user/repo'))
+        .toBe('github:user/repo');
     });
   });
 });

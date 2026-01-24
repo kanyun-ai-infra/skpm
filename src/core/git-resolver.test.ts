@@ -337,6 +337,109 @@ describe('GitResolver', () => {
       const parsed = resolver.parseRef('user/repo');
       expect(parsed.registry).toBe('github');
     });
+
+    it('should accept custom default registry', () => {
+      const resolver = new GitResolver('gitlab');
+      const parsed = resolver.parseRef('user/repo');
+      expect(parsed.registry).toBe('gitlab');
+    });
+
+    it('should accept custom registries configuration', () => {
+      const resolver = new GitResolver('github', {
+        internal: 'https://gitlab.company.com',
+      });
+      expect(resolver.getRegistryUrl('internal')).toBe('https://gitlab.company.com');
+    });
+
+    it('should accept registry resolver function', () => {
+      const customResolver = (name: string) => {
+        if (name === 'custom') {
+          return 'https://custom-git.example.com';
+        }
+        return `https://${name}`;
+      };
+      const resolver = new GitResolver('github', undefined, customResolver);
+      expect(resolver.getRegistryUrl('custom')).toBe('https://custom-git.example.com');
+    });
+  });
+
+  describe('getRegistryUrl', () => {
+    it('should return github URL for github registry', () => {
+      const resolver = new GitResolver();
+      expect(resolver.getRegistryUrl('github')).toBe('https://github.com');
+    });
+
+    it('should return gitlab URL for gitlab registry', () => {
+      const resolver = new GitResolver();
+      expect(resolver.getRegistryUrl('gitlab')).toBe('https://gitlab.com');
+    });
+
+    it('should return custom URL for custom registry', () => {
+      const resolver = new GitResolver('github', {
+        internal: 'https://gitlab.company.com',
+        enterprise: 'https://git.enterprise.io',
+      });
+      expect(resolver.getRegistryUrl('internal')).toBe('https://gitlab.company.com');
+      expect(resolver.getRegistryUrl('enterprise')).toBe('https://git.enterprise.io');
+    });
+
+    it('should use resolver function when provided', () => {
+      const customResolver = (name: string) => `https://${name}.custom.com`;
+      const resolver = new GitResolver('github', undefined, customResolver);
+      expect(resolver.getRegistryUrl('anything')).toBe('https://anything.custom.com');
+    });
+
+    it('should prioritize resolver function over custom registries', () => {
+      const customResolver = () => 'https://from-resolver.com';
+      const resolver = new GitResolver('github', { internal: 'https://from-config.com' }, customResolver);
+      expect(resolver.getRegistryUrl('internal')).toBe('https://from-resolver.com');
+    });
+
+    it('should fallback to https:// prefix for unknown registry', () => {
+      const resolver = new GitResolver();
+      expect(resolver.getRegistryUrl('unknown.host.com')).toBe('https://unknown.host.com');
+    });
+  });
+
+  describe('buildRepoUrl with custom registries', () => {
+    it('should build URL using custom registry', () => {
+      const resolver = new GitResolver('github', {
+        internal: 'https://gitlab.company.com',
+      });
+      const parsed = resolver.parseRef('internal:team/tool@v1.0.0');
+      expect(resolver.buildRepoUrl(parsed)).toBe('https://gitlab.company.com/team/tool');
+    });
+
+    it('should build URL using well-known registry', () => {
+      const resolver = new GitResolver('github', {
+        internal: 'https://gitlab.company.com',
+      });
+      const parsed = resolver.parseRef('github:user/skill@v1.0.0');
+      expect(resolver.buildRepoUrl(parsed)).toBe('https://github.com/user/skill');
+    });
+
+    it('should build URL using resolver function', () => {
+      const customResolver = (name: string) => {
+        const urls: Record<string, string> = {
+          enterprise: 'https://git.enterprise.io',
+          github: 'https://github.com',
+        };
+        return urls[name] || `https://${name}`;
+      };
+      const resolver = new GitResolver('github', undefined, customResolver);
+      const parsed = resolver.parseRef('enterprise:devteam/project@latest');
+      expect(resolver.buildRepoUrl(parsed)).toBe('https://git.enterprise.io/devteam/project');
+    });
+
+    it('should support nested paths with custom registry', () => {
+      const resolver = new GitResolver('github', {
+        internal: 'https://gitlab.company.com',
+      });
+      const parsed = resolver.parseRef('internal:team/monorepo/skills/pdf@v1.0.0');
+      // buildRepoUrl builds the base repo URL, subPath is handled separately
+      expect(resolver.buildRepoUrl(parsed)).toBe('https://gitlab.company.com/team/monorepo');
+      expect(parsed.subPath).toBe('skills/pdf');
+    });
   });
 
   describe('parseRef edge cases', () => {

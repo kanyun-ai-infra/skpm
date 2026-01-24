@@ -701,6 +701,79 @@ describe('SkillManager update() should check remote before reinstalling', () => 
   });
 });
 
+describe('SkillManager with custom registries', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reskill-registry-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('should use custom registries from config when resolving skill refs', () => {
+    // Create skills.json with custom registries
+    fs.writeFileSync(
+      path.join(tempDir, 'skills.json'),
+      JSON.stringify({
+        skills: {
+          'internal-tool': 'internal:team/tool@v1.0.0',
+        },
+        registries: {
+          internal: 'https://gitlab.company.com',
+        },
+      }),
+    );
+
+    // Create SkillManager - it should pick up registries from config
+    const manager = new SkillManager(tempDir);
+    
+    // The manager should exist and be configured
+    expect(manager.getProjectRoot()).toBe(tempDir);
+  });
+
+  it('should preserve registries when updating config', () => {
+    // Create initial config with registries
+    const initialConfig = {
+      skills: {},
+      registries: {
+        internal: 'https://gitlab.company.com',
+        enterprise: 'https://git.enterprise.io',
+      },
+    };
+    fs.writeFileSync(
+      path.join(tempDir, 'skills.json'),
+      JSON.stringify(initialConfig, null, 2),
+    );
+
+    // Create SkillManager
+    const manager = new SkillManager(tempDir);
+
+    // Read config to verify registries
+    const configPath = path.join(tempDir, 'skills.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    expect(config.registries.internal).toBe('https://gitlab.company.com');
+    expect(config.registries.enterprise).toBe('https://git.enterprise.io');
+  });
+
+  it('should handle config without registries section', () => {
+    // Create config without registries
+    fs.writeFileSync(
+      path.join(tempDir, 'skills.json'),
+      JSON.stringify({
+        skills: {
+          'github-skill': 'github:user/skill@v1.0.0',
+        },
+      }),
+    );
+
+    // Should not throw
+    const manager = new SkillManager(tempDir);
+    expect(manager.getProjectRoot()).toBe(tempDir);
+  });
+});
+
 // Integration tests (require network)
 describe('SkillManager integration', () => {
   it.skip('should install from real repository', async () => {

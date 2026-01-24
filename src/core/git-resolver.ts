@@ -1,13 +1,19 @@
 import * as semver from 'semver';
-import type { ParsedSkillRef, ParsedVersion } from '../types/index.js';
+import type { ParsedSkillRef, ParsedVersion, RegistryConfig } from '../types/index.js';
 import {
-  buildRepoUrl,
   getDefaultBranch,
   getLatestTag,
   getRemoteTags,
   isGitUrl,
   parseGitUrl,
 } from '../utils/git.js';
+import { DEFAULT_REGISTRIES } from './config-loader.js';
+
+/**
+ * Registry resolver function type
+ * Takes a registry name and returns the base URL
+ */
+export type RegistryResolver = (registryName: string) => string;
 
 /**
  * GitResolver - Parse skill references and versions
@@ -27,7 +33,55 @@ import {
  *   - (none)        Default branch
  */
 export class GitResolver {
-  private readonly defaultRegistry = 'github';
+  private readonly defaultRegistry: string;
+  private readonly customRegistries: RegistryConfig;
+  private readonly registryResolver?: RegistryResolver;
+
+  /**
+   * Create a GitResolver instance
+   *
+   * @param defaultRegistry - Default registry name (defaults to 'github')
+   * @param registries - Custom registry configuration (name -> URL mapping)
+   * @param registryResolver - Optional custom registry resolver function
+   */
+  constructor(
+    defaultRegistry: string = 'github',
+    registries?: RegistryConfig,
+    registryResolver?: RegistryResolver,
+  ) {
+    this.defaultRegistry = defaultRegistry;
+    this.customRegistries = registries ?? {};
+    this.registryResolver = registryResolver;
+  }
+
+  /**
+   * Get registry URL by name
+   *
+   * Resolution order:
+   * 1. Custom registry resolver function (if provided)
+   * 2. Custom registries from configuration
+   * 3. Well-known registries (github, gitlab)
+   * 4. Assumes it's a custom domain (https://{registryName})
+   */
+  getRegistryUrl(registryName: string): string {
+    // Use custom resolver if provided
+    if (this.registryResolver) {
+      return this.registryResolver(registryName);
+    }
+
+    // Check custom registries from configuration
+    if (this.customRegistries[registryName]) {
+      return this.customRegistries[registryName];
+    }
+
+    // Check well-known registries
+    if (DEFAULT_REGISTRIES[registryName]) {
+      return DEFAULT_REGISTRIES[registryName];
+    }
+
+    // Assume it's a custom domain
+    return `https://${registryName}`;
+  }
 
   /**
    * Parse skill reference string
@@ -229,7 +283,9 @@ export class GitResolver {
     if (parsed.gitUrl) {
       return parsed.gitUrl;
     }
-    return buildRepoUrl(parsed.registry, `${parsed.owner}/${parsed.repo}`);
+    // Use our registry resolver to get the base URL
+    const baseUrl = this.getRegistryUrl(parsed.registry);
+    return `${baseUrl}/${parsed.owner}/${parsed.repo}`;
   }
 
   /**
