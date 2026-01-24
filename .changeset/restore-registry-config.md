@@ -9,6 +9,7 @@ Restore custom registry configuration support
 - `GitResolver` now accepts an optional `registryResolver` function for custom registry URL resolution
 - `SkillManager` passes `ConfigLoader.getRegistryUrl()` to `GitResolver` to enable custom registries
 - Exported new types `GitResolverOptions` and `RegistryResolver` from core module
+- Default `skills.json` template now includes `registries` section with `github` pre-configured
 
 **Usage:**
 ```json
@@ -31,6 +32,7 @@ Restore custom registry configuration support
 - `GitResolver` 现在接受可选的 `registryResolver` 函数用于自定义 registry URL 解析
 - `SkillManager` 将 `ConfigLoader.getRegistryUrl()` 传递给 `GitResolver` 以启用自定义 registries
 - 从 core 模块导出新类型 `GitResolverOptions` 和 `RegistryResolver`
+- 默认 `skills.json` 模板现在包含预配置 `github` 的 `registries` 部分
 
 **使用方式:**
 ```json

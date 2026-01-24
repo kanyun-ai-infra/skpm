@@ -11,6 +11,9 @@ import { exists, getSkillsJsonPath, readJson, writeJson } from '../utils/fs.js';
  */
 const DEFAULT_SKILLS_JSON: SkillsJson = {
   skills: {},
+  registries: {
+    github: 'https://github.com',
+  },
   defaults: {
     installDir: '.skills',
   },
