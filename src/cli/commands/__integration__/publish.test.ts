@@ -3,6 +3,10 @@
  *
  * Tests for the publish command --dry-run validation
  * (API calls are not tested here, only local validation)
+ *
+ * Following agentskills.io specification:
+ * - SKILL.md is REQUIRED with name and description in frontmatter
+ * - skill.json is OPTIONAL for additional metadata
  */
 
 import { execSync } from 'node:child_process';
@@ -37,6 +41,20 @@ describe('CLI Integration: publish', () => {
 
   function createSkillMd(content: string): void {
     fs.writeFileSync(path.join(tempDir, 'SKILL.md'), content);
+  }
+
+  /** Create a valid SKILL.md with required frontmatter */
+  function createValidSkillMd(
+    name = 'my-skill',
+    description = 'A helpful AI skill',
+  ): void {
+    createSkillMd(`---
+name: ${name}
+description: ${description}
+---
+# ${name}
+
+This is the skill content.`);
   }
 
   function initGitRepo(): void {
@@ -84,20 +102,105 @@ describe('CLI Integration: publish', () => {
   });
 
   // ============================================================================
-  // --dry-run validation: skill.json
+  // --dry-run validation: SKILL.md (required per agentskills.io spec)
   // ============================================================================
 
-  describe('--dry-run: skill.json validation', () => {
-    it('should fail without skill.json', () => {
-      const { exitCode } = runCli('publish --dry-run', tempDir);
+  describe('--dry-run: SKILL.md validation (required)', () => {
+    it('should fail without SKILL.md', () => {
       const result = runCli('publish --dry-run', tempDir);
 
       expect(result.exitCode).toBe(1);
-      expect(getOutput(result)).toContain('skill.json');
+      expect(getOutput(result)).toContain('SKILL.md');
       expect(getOutput(result)).toContain('not found');
     });
 
-    it('should fail with invalid JSON', () => {
+    it('should fail when SKILL.md has no frontmatter', () => {
+      createSkillMd('# My Skill\n\nNo frontmatter here.');
+
+      const result = runCli('publish --dry-run', tempDir);
+
+      expect(result.exitCode).toBe(1);
+      expect(getOutput(result)).toContain('frontmatter');
+    });
+
+    it('should fail without name in SKILL.md', () => {
+      createSkillMd(`---
+description: Test skill
+---
+# Content`);
+
+      const result = runCli('publish --dry-run', tempDir);
+
+      expect(result.exitCode).toBe(1);
+      expect(getOutput(result)).toContain('SKILL.md');
+    });
+
+    it('should fail without description in SKILL.md', () => {
+      createSkillMd(`---
+name: my-skill
+---
+# Content`);
+
+      const result = runCli('publish --dry-run', tempDir);
+
+      expect(result.exitCode).toBe(1);
+      expect(getOutput(result)).toContain('SKILL.md');
+    });
+
+    it('should fail with uppercase name in SKILL.md', () => {
+      createSkillMd(`---
+name: MySkill
+description: Test skill
+---
+# Content`);
+
+      const result = runCli('publish --dry-run', tempDir);
+
+      expect(result.exitCode).toBe(1);
+      expect(getOutput(result)).toContain('lowercase');
+    });
+
+    it('should fail with name starting with hyphen', () => {
+      createSkillMd(`---
+name: -my-skill
+description: Test skill
+---
+# Content`);
+
+      const result = runCli('publish --dry-run', tempDir);
+
+      expect(result.exitCode).toBe(1);
+    });
+
+    it('should pass with valid SKILL.md only (no skill.json)', () => {
+      createValidSkillMd();
+
+      const result = runCli('publish --dry-run', tempDir);
+
+      expect(result.exitCode).toBe(0);
+      expect(getOutput(result)).toContain('Dry run');
+      expect(getOutput(result)).toContain('my-skill');
+      expect(getOutput(result)).toContain('No changes made');
+    });
+
+    it('should show warning about missing skill.json', () => {
+      createValidSkillMd();
+
+      const result = runCli('publish --dry-run', tempDir);
+
+      expect(result.exitCode).toBe(0);
+      expect(getOutput(result)).toContain('skill.json');
+      expect(getOutput(result)).toContain('optional');
+    });
+  });
+
+  // ============================================================================
+  // --dry-run validation: skill.json (optional)
+  // ============================================================================
+
+  describe('--dry-run: skill.json validation (optional)', () => {
+    it('should fail with invalid JSON in skill.json', () => {
+      createValidSkillMd();
       fs.writeFileSync(path.join(tempDir, 'skill.json'), '{ invalid json }');
 
       const result = runCli('publish --dry-run', tempDir);
@@ -106,59 +209,11 @@ describe('CLI Integration: publish', () => {
       expect(getOutput(result)).toContain('skill.json');
     });
 
-    it('should fail without name', () => {
-      createSkillJson({
-        version: '1.0.0',
-        description: 'Test skill',
-      });
-
-      const result = runCli('publish --dry-run', tempDir);
-
-      expect(result.exitCode).toBe(1);
-      expect(getOutput(result)).toContain('name');
-    });
-
-    it('should fail without version', () => {
+    it('should fail with invalid version in skill.json', () => {
+      createValidSkillMd();
       createSkillJson({
         name: 'my-skill',
-        description: 'Test skill',
-      });
-
-      const result = runCli('publish --dry-run', tempDir);
-
-      expect(result.exitCode).toBe(1);
-      expect(getOutput(result)).toContain('version');
-    });
-
-    it('should fail without description', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-      });
-
-      const result = runCli('publish --dry-run', tempDir);
-
-      expect(result.exitCode).toBe(1);
-      expect(getOutput(result)).toContain('description');
-    });
-
-    it('should fail with uppercase name', () => {
-      createSkillJson({
-        name: 'MySkill',
-        version: '1.0.0',
-        description: 'Test skill',
-      });
-
-      const result = runCli('publish --dry-run', tempDir);
-
-      expect(result.exitCode).toBe(1);
-      expect(getOutput(result)).toContain('lowercase');
-    });
-
-    it('should fail with invalid version format', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0',
+        version: '1.0', // Invalid semver
         description: 'Test skill',
       });
 
@@ -168,9 +223,10 @@ describe('CLI Integration: publish', () => {
       expect(getOutput(result)).toContain('semver');
     });
 
-    it('should fail with name starting with hyphen', () => {
+    it('should fail when names mismatch between SKILL.md and skill.json', () => {
+      createValidSkillMd('my-skill');
       createSkillJson({
-        name: '-my-skill',
+        name: 'different-skill',
         version: '1.0.0',
         description: 'Test skill',
       });
@@ -178,9 +234,11 @@ describe('CLI Integration: publish', () => {
       const result = runCli('publish --dry-run', tempDir);
 
       expect(result.exitCode).toBe(1);
+      expect(getOutput(result)).toContain('mismatch');
     });
 
-    it('should pass with valid skill.json', () => {
+    it('should pass with valid SKILL.md and skill.json', () => {
+      createValidSkillMd();
       createSkillJson({
         name: 'my-skill',
         version: '1.0.0',
@@ -195,93 +253,40 @@ describe('CLI Integration: publish', () => {
       expect(getOutput(result)).toContain('1.0.0');
       expect(getOutput(result)).toContain('No changes made');
     });
-
-    it('should collect multiple validation errors', () => {
-      createSkillJson({
-        name: 'MySkill',
-        version: '1.0',
-        // missing description
-      });
-
-      const result = runCli('publish --dry-run', tempDir);
-
-      expect(result.exitCode).toBe(1);
-      // Should report all errors
-      const output = getOutput(result);
-      expect(output).toContain('name');
-      expect(output).toContain('version');
-      expect(output).toContain('description');
-    });
   });
 
   // ============================================================================
-  // --dry-run validation: SKILL.md
+  // --dry-run validation: SKILL.md with skill.json
   // ============================================================================
 
-  describe('--dry-run: SKILL.md validation', () => {
-    it('should warn when SKILL.md is missing', () => {
+  describe('--dry-run: SKILL.md with skill.json', () => {
+    it('should pass with valid SKILL.md and skill.json', () => {
+      createValidSkillMd();
       createSkillJson({
         name: 'my-skill',
         version: '1.0.0',
         description: 'Test skill',
       });
-
-      const result = runCli('publish --dry-run', tempDir);
-
-      expect(result.exitCode).toBe(0);
-      expect(getOutput(result)).toContain('SKILL.md');
-    });
-
-    it('should pass with valid SKILL.md', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-        description: 'Test skill',
-      });
-      createSkillMd(`---
-name: my-skill
-description: A test skill for validation
----
-# My Skill
-
-This is the skill content.`);
 
       const result = runCli('publish --dry-run', tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('SKILL.md found');
+      expect(getOutput(result)).toContain('skill.json found');
     });
 
-    it('should fail when SKILL.md name mismatches skill.json', () => {
+    it('should use version from skill.json', () => {
+      createValidSkillMd();
       createSkillJson({
         name: 'my-skill',
-        version: '1.0.0',
+        version: '2.5.0',
         description: 'Test skill',
       });
-      createSkillMd(`---
-name: different-skill
-description: A different skill
----
-# Content`);
 
       const result = runCli('publish --dry-run', tempDir);
 
-      expect(result.exitCode).toBe(1);
-      expect(getOutput(result)).toContain('mismatch');
-    });
-
-    it('should warn for SKILL.md without frontmatter', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-        description: 'Test skill',
-      });
-      createSkillMd('# My Skill\n\nNo frontmatter here.');
-
-      const result = runCli('publish --dry-run', tempDir);
-
-      // Should pass but with warning
       expect(result.exitCode).toBe(0);
+      expect(getOutput(result)).toContain('2.5.0');
     });
   });
 
@@ -291,11 +296,7 @@ description: A different skill
 
   describe('--dry-run: Git information', () => {
     it('should show commit information', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-        description: 'Test skill',
-      });
+      createValidSkillMd();
       initGitRepo();
       gitCommit();
 
@@ -306,11 +307,7 @@ description: A different skill
     });
 
     it('should show tag information', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-        description: 'Test skill',
-      });
+      createValidSkillMd();
       initGitRepo();
       gitCommit();
       gitTag('v1.0.0');
@@ -322,11 +319,7 @@ description: A different skill
     });
 
     it('should show repository URL', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-        description: 'Test skill',
-      });
+      createValidSkillMd();
       initGitRepo();
       gitCommit();
       setRemote('https://github.com/user/my-skill.git');
@@ -338,11 +331,7 @@ description: A different skill
     });
 
     it('should warn about dirty working tree', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-        description: 'Test skill',
-      });
+      createValidSkillMd();
       initGitRepo();
       gitCommit();
 
@@ -356,11 +345,7 @@ description: A different skill
     });
 
     it('should use specified tag with --tag', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-        description: 'Test skill',
-      });
+      createValidSkillMd();
       initGitRepo();
       gitCommit();
       gitTag('v1.0.0');
@@ -377,11 +362,7 @@ description: A different skill
     });
 
     it('should fail with non-existent tag', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-        description: 'Test skill',
-      });
+      createValidSkillMd();
       initGitRepo();
       gitCommit();
 
@@ -392,11 +373,7 @@ description: A different skill
     });
 
     it('should work without git repository', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-        description: 'Test skill',
-      });
+      createValidSkillMd();
 
       const result = runCli('publish --dry-run', tempDir);
 
@@ -411,16 +388,12 @@ description: A different skill
 
   describe('--dry-run: Files listing', () => {
     it('should list files to publish', () => {
+      createValidSkillMd();
       createSkillJson({
         name: 'my-skill',
         version: '1.0.0',
         description: 'Test skill',
       });
-      createSkillMd(`---
-name: my-skill
-description: Test
----
-# Content`);
 
       const result = runCli('publish --dry-run', tempDir);
 
@@ -430,6 +403,7 @@ description: Test
     });
 
     it('should include files from files array', () => {
+      createValidSkillMd();
       fs.mkdirSync(path.join(tempDir, 'examples'));
       fs.writeFileSync(path.join(tempDir, 'examples', 'basic.md'), '# Basic Example');
 
@@ -447,16 +421,7 @@ description: Test
     });
 
     it('should show total file count and size', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-        description: 'Test skill',
-      });
-      createSkillMd(`---
-name: my-skill
-description: Test
----
-# Content`);
+      createValidSkillMd();
 
       const result = runCli('publish --dry-run', tempDir);
 
@@ -471,11 +436,7 @@ description: Test
 
   describe('--dry-run: Integrity hash', () => {
     it('should display integrity hash', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-        description: 'Test skill',
-      });
+      createValidSkillMd();
 
       const result = runCli('publish --dry-run', tempDir);
 
@@ -489,7 +450,8 @@ description: Test
   // ============================================================================
 
   describe('--dry-run: Metadata display', () => {
-    it('should display keywords', () => {
+    it('should display keywords from skill.json', () => {
+      createValidSkillMd();
       createSkillJson({
         name: 'my-skill',
         version: '1.0.0',
@@ -504,13 +466,13 @@ description: Test
       expect(getOutput(result)).toContain('testing');
     });
 
-    it('should display license', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-        description: 'Test skill',
-        license: 'MIT',
-      });
+    it('should display license from SKILL.md', () => {
+      createSkillMd(`---
+name: my-skill
+description: Test skill
+license: MIT
+---
+# Content`);
 
       const result = runCli('publish --dry-run', tempDir);
 
@@ -518,7 +480,23 @@ description: Test
       expect(getOutput(result)).toContain('MIT');
     });
 
-    it('should display compatibility', () => {
+    it('should display license from skill.json', () => {
+      createValidSkillMd();
+      createSkillJson({
+        name: 'my-skill',
+        version: '1.0.0',
+        description: 'Test skill',
+        license: 'Apache-2.0',
+      });
+
+      const result = runCli('publish --dry-run', tempDir);
+
+      expect(result.exitCode).toBe(0);
+      expect(getOutput(result)).toContain('Apache-2.0');
+    });
+
+    it('should display compatibility from skill.json', () => {
+      createValidSkillMd();
       createSkillJson({
         name: 'my-skill',
         version: '1.0.0',
@@ -543,11 +521,7 @@ description: Test
 
   describe('authentication check', () => {
     it('should fail without token when not using --dry-run', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-        description: 'Test skill',
-      });
+      createValidSkillMd();
 
       const result = runCli('publish --yes', tempDir);
 
@@ -556,11 +530,7 @@ description: Test
     });
 
     it('should not require auth for --dry-run', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-        description: 'Test skill',
-      });
+      createValidSkillMd();
 
       const result = runCli('publish --dry-run', tempDir);
 
@@ -578,12 +548,12 @@ description: Test
       const subDir = path.join(tempDir, 'subdir');
       fs.mkdirSync(subDir);
       fs.writeFileSync(
-        path.join(subDir, 'skill.json'),
-        JSON.stringify({
-          name: 'sub-skill',
-          version: '1.0.0',
-          description: 'A skill in subdirectory',
-        }, null, 2),
+        path.join(subDir, 'SKILL.md'),
+        `---
+name: sub-skill
+description: A skill in subdirectory
+---
+# Sub Skill`,
       );
 
       const result = runCli(`publish ${subDir} --dry-run`, tempDir);
@@ -605,6 +575,7 @@ description: Test
 
   describe('custom entry file', () => {
     it('should fail when custom entry file does not exist', () => {
+      createValidSkillMd();
       createSkillJson({
         name: 'my-skill',
         version: '1.0.0',
@@ -620,6 +591,7 @@ description: Test
     });
 
     it('should pass when custom entry file exists', () => {
+      createValidSkillMd();
       createSkillJson({
         name: 'my-skill',
         version: '1.0.0',
