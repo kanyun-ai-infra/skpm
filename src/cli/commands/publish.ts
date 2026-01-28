@@ -11,6 +11,7 @@ import { createInterface } from 'node:readline';
 import { Command } from 'commander';
 import { AuthManager } from '../../core/auth-manager.js';
 import { Publisher, PublishError, type GitInfo, type PublishPayload } from '../../core/publisher.js';
+import { RegistryClient, RegistryError } from '../../core/registry-client.js';
 import {
   SkillValidator,
   type LoadedSkill,
@@ -71,14 +72,18 @@ function displayValidation(
 ): void {
   logger.log('Validating skill...');
 
-  if (skill.skillJson) {
-    logger.log('  ✓ skill.json found');
-  }
-
+  // SKILL.md is the primary file per agentskills.io spec
   if (skill.skillMd) {
     logger.log('  ✓ SKILL.md found');
   } else {
-    logger.log('  ⚠ SKILL.md not found');
+    logger.log('  ✗ SKILL.md not found (required)');
+  }
+
+  // skill.json is optional
+  if (skill.skillJson && !skill.synthesized) {
+    logger.log('  ✓ skill.json found');
+  } else if (skill.synthesized) {
+    logger.log('  ℹ skill.json not found (using SKILL.md metadata)');
   }
 
   if (validation.valid && skill.skillJson) {
@@ -165,11 +170,12 @@ function displayFiles(skillPath: string, files: string[], publisher: Publisher):
  * Display metadata
  */
 function displayMetadata(skill: LoadedSkill): void {
-  if (!skill.skillJson) return;
+  const keywords = skill.skillJson?.keywords;
+  const license = skill.skillJson?.license || skill.skillMd?.license;
+  const compatibility = skill.skillJson?.compatibility;
+  const skillMdCompatibility = skill.skillMd?.compatibility;
 
-  const { keywords, license, compatibility } = skill.skillJson;
-
-  if (keywords || license || compatibility) {
+  if (keywords || license || compatibility || skillMdCompatibility) {
     logger.newline();
     logger.log('Metadata:');
 
@@ -186,6 +192,8 @@ function displayMetadata(skill: LoadedSkill): void {
         .map(([k, v]) => `${k} ${v}`)
         .join(', ');
       logger.log(`  • Compatibility: ${compat}`);
+    } else if (skillMdCompatibility) {
+      logger.log(`  • Compatibility: ${skillMdCompatibility}`);
     }
   }
 }
@@ -366,18 +374,70 @@ async function publishAction(
       }
     }
 
-    // 10. Actually publish (TODO: implement registry client)
+    // 10. Get auth token
+    const authManager = new AuthManager();
+    const token = authManager.getToken(registry);
+    if (!token) {
+      logger.error('Authentication required');
+      logger.newline();
+      logger.log("You must be logged in to publish skills.");
+      logger.log("Run 'reskill login' to authenticate.");
+      process.exit(1);
+    }
+
+    // 11. Actually publish
     logger.newline();
     logger.log(`Publishing to ${registry}...`);
 
-    // TODO: Call registry API
-    // const client = new RegistryClient({ registry, token: auth!.token });
-    // const result = await client.publish(skill.skillJson!.name, payload!);
+    const client = new RegistryClient({ registry, token });
 
-    logger.newline();
-    logger.error('Registry API not yet implemented.');
-    logger.log('Use --dry-run to validate your skill locally.');
-    process.exit(1);
+    try {
+      // Get skill name with scope (e.g., @handle/skill-name)
+      const handle = authManager.getHandle(registry);
+      if (!handle) {
+        logger.error('Cannot determine your handle. Please re-login.');
+        logger.log("Run 'reskill login' to authenticate.");
+        process.exit(1);
+      }
+      const skillName = skill.skillJson!.name.includes('/') 
+        ? skill.skillJson!.name 
+        : `@${handle}/${skill.skillJson!.name}`;
+
+      const result = await client.publish(
+        skillName,
+        payload!,
+        absolutePath,
+        { tag: options.tag },
+      );
+
+      if (!result.success || !result.data) {
+        logger.error(result.error || 'Publish failed');
+        process.exit(1);
+      }
+
+      logger.newline();
+      logger.log('✓ Published successfully!');
+      logger.newline();
+      logger.log(`  Name: ${result.data.name}`);
+      logger.log(`  Version: ${result.data.version}`);
+      logger.log(`  Tag: ${result.data.tag}`);
+      logger.log(`  Integrity: ${result.data.integrity}`);
+      logger.newline();
+      logger.log(`View at: ${registry}/skills/${encodeURIComponent(result.data.name)}`);
+
+    } catch (publishError) {
+      if (publishError instanceof RegistryError) {
+        logger.error(`Publish failed: ${publishError.message}`);
+        if (publishError.statusCode === 409) {
+          logger.log('This version already exists. Bump the version in skill.json.');
+        } else if (publishError.statusCode === 403) {
+          logger.log('You do not have permission to publish this skill.');
+        }
+      } else {
+        logger.error(`Publish failed: ${(publishError as Error).message}`);
+      }
+      process.exit(1);
+    }
 
   } catch (error) {
     if (error instanceof PublishError) {

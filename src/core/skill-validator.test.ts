@@ -1,7 +1,11 @@
 /**
  * SkillValidator unit tests
  *
- * Tests for validating skill.json and SKILL.md for publishing
+ * Tests for validating SKILL.md and skill.json for publishing
+ *
+ * Following agentskills.io specification:
+ * - SKILL.md is REQUIRED with name and description in frontmatter
+ * - skill.json is OPTIONAL for additional metadata
  */
 
 import * as fs from 'node:fs';
@@ -33,6 +37,21 @@ describe('SkillValidator', () => {
 
   function createSkillMd(content: string): void {
     fs.writeFileSync(path.join(tempDir, 'SKILL.md'), content);
+  }
+
+  /** Create a valid SKILL.md with required frontmatter */
+  function createValidSkillMd(
+    name = 'my-skill',
+    description = 'A helpful skill',
+    extra = '',
+  ): void {
+    createSkillMd(`---
+name: ${name}
+description: ${description}${extra}
+---
+# ${name}
+
+This is the skill content.`);
   }
 
   // ============================================================================
@@ -223,15 +242,14 @@ describe('SkillValidator', () => {
       expect(result.valid).toBe(true);
     });
 
-    it('should reject description with < character', () => {
-      const result = validator.validateDescription('Use <script> tags');
-      expect(result.valid).toBe(false);
-      expect(result.errors[0].message).toContain('angle brackets');
+    it('should accept description with < character (per agentskills.io spec)', () => {
+      const result = validator.validateDescription('Use <tool> for tasks');
+      expect(result.valid).toBe(true);
     });
 
-    it('should reject description with > character', () => {
+    it('should accept description with > character (per agentskills.io spec)', () => {
       const result = validator.validateDescription('Value > 10');
-      expect(result.valid).toBe(false);
+      expect(result.valid).toBe(true);
     });
   });
 
@@ -240,8 +258,81 @@ describe('SkillValidator', () => {
   // ============================================================================
 
   describe('validate', () => {
-    describe('skill.json validation', () => {
-      it('should pass with valid skill.json', () => {
+    describe('SKILL.md validation (required)', () => {
+      it('should pass with valid SKILL.md only (no skill.json)', () => {
+        createValidSkillMd();
+
+        const result = validator.validate(tempDir);
+        expect(result.valid).toBe(true);
+        // Should have info warning about missing skill.json
+        expect(result.warnings.some((w) => w.field === 'skill.json')).toBe(true);
+      });
+
+      it('should fail without SKILL.md', () => {
+        const result = validator.validate(tempDir);
+        expect(result.valid).toBe(false);
+        expect(result.errors[0].field).toBe('SKILL.md');
+        expect(result.errors[0].message).toContain('not found');
+      });
+
+      it('should fail when SKILL.md has no frontmatter', () => {
+        createSkillMd('# My Skill\n\nNo frontmatter here');
+
+        const result = validator.validate(tempDir);
+        expect(result.valid).toBe(false);
+        expect(result.errors[0].field).toBe('SKILL.md');
+        expect(result.errors[0].message).toContain('frontmatter');
+      });
+
+      it('should fail without name in SKILL.md', () => {
+        createSkillMd(`---
+description: A skill
+---
+# Content`);
+
+        const result = validator.validate(tempDir);
+        expect(result.valid).toBe(false);
+        expect(result.errors[0].field).toBe('SKILL.md');
+      });
+
+      it('should fail without description in SKILL.md', () => {
+        createSkillMd(`---
+name: my-skill
+---
+# Content`);
+
+        const result = validator.validate(tempDir);
+        expect(result.valid).toBe(false);
+        expect(result.errors[0].field).toBe('SKILL.md');
+      });
+
+      it('should fail with invalid name format in SKILL.md', () => {
+        createSkillMd(`---
+name: MySkill
+description: A skill
+---
+# Content`);
+
+        const result = validator.validate(tempDir);
+        expect(result.valid).toBe(false);
+        expect(result.errors.some((e) => e.field === 'name')).toBe(true);
+      });
+
+      it('should accept description with angle brackets in SKILL.md (per spec)', () => {
+        createSkillMd(`---
+name: my-skill
+description: Use <tool> for tasks
+---
+# Content`);
+
+        const result = validator.validate(tempDir);
+        expect(result.valid).toBe(true);
+      });
+    });
+
+    describe('skill.json validation (optional)', () => {
+      it('should pass with valid SKILL.md and skill.json', () => {
+        createValidSkillMd();
         createSkillJson({
           name: 'my-skill',
           version: '1.0.0',
@@ -253,14 +344,8 @@ describe('SkillValidator', () => {
         expect(result.errors).toHaveLength(0);
       });
 
-      it('should fail without skill.json', () => {
-        const result = validator.validate(tempDir);
-        expect(result.valid).toBe(false);
-        expect(result.errors[0].field).toBe('skill.json');
-        expect(result.errors[0].message).toContain('not found');
-      });
-
-      it('should fail with invalid JSON', () => {
+      it('should fail with invalid JSON syntax in skill.json', () => {
+        createValidSkillMd();
         fs.writeFileSync(path.join(tempDir, 'skill.json'), '{ invalid json }');
 
         const result = validator.validate(tempDir);
@@ -269,20 +354,11 @@ describe('SkillValidator', () => {
         expect(result.errors[0].message).toContain('parse');
       });
 
-      it('should fail without name', () => {
-        createSkillJson({
-          version: '1.0.0',
-          description: 'A skill',
-        });
-
-        const result = validator.validate(tempDir);
-        expect(result.valid).toBe(false);
-        expect(result.errors.some((e) => e.field === 'name')).toBe(true);
-      });
-
-      it('should fail without version', () => {
+      it('should fail with invalid version in skill.json', () => {
+        createValidSkillMd();
         createSkillJson({
           name: 'my-skill',
+          version: '1.0', // Invalid semver
           description: 'A skill',
         });
 
@@ -291,139 +367,21 @@ describe('SkillValidator', () => {
         expect(result.errors.some((e) => e.field === 'version')).toBe(true);
       });
 
-      it('should fail without description', () => {
+      it('should fail when SKILL.md and skill.json names mismatch', () => {
+        createValidSkillMd('my-skill');
         createSkillJson({
-          name: 'my-skill',
-          version: '1.0.0',
-        });
-
-        const result = validator.validate(tempDir);
-        expect(result.valid).toBe(false);
-        expect(result.errors.some((e) => e.field === 'description')).toBe(true);
-      });
-
-      it('should fail with invalid name format', () => {
-        createSkillJson({
-          name: 'MySkill',
+          name: 'different-skill',
           version: '1.0.0',
           description: 'A skill',
         });
-
-        const result = validator.validate(tempDir);
-        expect(result.valid).toBe(false);
-        expect(result.errors.some((e) => e.field === 'name')).toBe(true);
-      });
-
-      it('should fail with invalid version format', () => {
-        createSkillJson({
-          name: 'my-skill',
-          version: '1.0',
-          description: 'A skill',
-        });
-
-        const result = validator.validate(tempDir);
-        expect(result.valid).toBe(false);
-        expect(result.errors.some((e) => e.field === 'version')).toBe(true);
-      });
-
-      it('should collect multiple errors', () => {
-        createSkillJson({
-          name: 'MySkill',
-          version: '1.0',
-        });
-
-        const result = validator.validate(tempDir);
-        expect(result.valid).toBe(false);
-        expect(result.errors.length).toBeGreaterThanOrEqual(3);
-      });
-    });
-
-    describe('SKILL.md validation', () => {
-      it('should warn when SKILL.md is missing', () => {
-        createSkillJson({
-          name: 'my-skill',
-          version: '1.0.0',
-          description: 'A skill',
-        });
-
-        const result = validator.validate(tempDir);
-        expect(result.valid).toBe(true);
-        expect(result.warnings.some((w) => w.field === 'SKILL.md')).toBe(true);
-      });
-
-      it('should pass with matching SKILL.md', () => {
-        createSkillJson({
-          name: 'my-skill',
-          version: '1.0.0',
-          description: 'A skill',
-        });
-        createSkillMd(`---
-name: my-skill
-description: A skill for testing
----
-# My Skill`);
-
-        const result = validator.validate(tempDir);
-        expect(result.valid).toBe(true);
-        expect(result.warnings.some((w) => w.field === 'SKILL.md')).toBe(false);
-      });
-
-      it('should fail when SKILL.md name mismatches', () => {
-        createSkillJson({
-          name: 'my-skill',
-          version: '1.0.0',
-          description: 'A skill',
-        });
-        createSkillMd(`---
-name: different-skill
-description: A skill
----
-Content`);
 
         const result = validator.validate(tempDir);
         expect(result.valid).toBe(false);
         expect(result.errors.some((e) => e.message.includes('mismatch'))).toBe(true);
       });
 
-      it('should warn for SKILL.md without frontmatter', () => {
-        createSkillJson({
-          name: 'my-skill',
-          version: '1.0.0',
-          description: 'A skill',
-        });
-        createSkillMd('# My Skill\n\nNo frontmatter here');
-
-        const result = validator.validate(tempDir);
-        expect(result.valid).toBe(true);
-        expect(result.warnings.some((w) => w.field === 'SKILL.md')).toBe(true);
-      });
-    });
-
-    describe('optional fields validation', () => {
-      it('should warn for missing license', () => {
-        createSkillJson({
-          name: 'my-skill',
-          version: '1.0.0',
-          description: 'A skill',
-        });
-
-        const result = validator.validate(tempDir);
-        expect(result.warnings.some((w) => w.field === 'license')).toBe(true);
-      });
-
-      it('should not warn when license is present', () => {
-        createSkillJson({
-          name: 'my-skill',
-          version: '1.0.0',
-          description: 'A skill',
-          license: 'MIT',
-        });
-
-        const result = validator.validate(tempDir);
-        expect(result.warnings.some((w) => w.field === 'license')).toBe(false);
-      });
-
-      it('should warn for too many keywords', () => {
+      it('should warn for too many keywords in skill.json', () => {
+        createValidSkillMd();
         createSkillJson({
           name: 'my-skill',
           version: '1.0.0',
@@ -436,6 +394,7 @@ Content`);
       });
 
       it('should accept up to 10 keywords', () => {
+        createValidSkillMd();
         createSkillJson({
           name: 'my-skill',
           version: '1.0.0',
@@ -448,21 +407,94 @@ Content`);
       });
     });
 
-    describe('entry file validation', () => {
-      it('should fail when default entry file SKILL.md does not exist', () => {
+    describe('version validation', () => {
+      it('should warn when no version specified (SKILL.md only)', () => {
+        createValidSkillMd();
+
+        const result = validator.validate(tempDir);
+        expect(result.valid).toBe(true);
+        expect(result.warnings.some((w) => w.field === 'version')).toBe(true);
+      });
+
+      it('should accept version from SKILL.md metadata', () => {
+        createSkillMd(`---
+name: my-skill
+description: A helpful skill
+metadata:
+  version: "1.2.3"
+---
+# Content`);
+
+        const result = validator.validate(tempDir);
+        expect(result.valid).toBe(true);
+        // Should not warn about missing version
+        expect(result.warnings.some((w) => w.field === 'version')).toBe(false);
+      });
+
+      it('should fail with invalid version in SKILL.md metadata', () => {
+        createSkillMd(`---
+name: my-skill
+description: A helpful skill
+metadata:
+  version: "invalid"
+---
+# Content`);
+
+        const result = validator.validate(tempDir);
+        expect(result.valid).toBe(false);
+        expect(result.errors.some((e) => e.field === 'version')).toBe(true);
+      });
+
+      it('should accept version from skill.json when both exist', () => {
+        createValidSkillMd();
         createSkillJson({
           name: 'my-skill',
-          version: '1.0.0',
+          version: '2.0.0',
           description: 'A skill',
         });
 
         const result = validator.validate(tempDir);
-        // Should warn about missing SKILL.md but still be valid
-        // (SKILL.md is recommended but not strictly required)
         expect(result.valid).toBe(true);
       });
+    });
 
+    describe('license validation', () => {
+      it('should warn for missing license', () => {
+        createValidSkillMd();
+
+        const result = validator.validate(tempDir);
+        expect(result.warnings.some((w) => w.field === 'license')).toBe(true);
+      });
+
+      it('should not warn when license is in SKILL.md', () => {
+        createSkillMd(`---
+name: my-skill
+description: A helpful skill
+license: MIT
+---
+# Content`);
+
+        const result = validator.validate(tempDir);
+        expect(result.warnings.some((w) => w.field === 'license')).toBe(false);
+      });
+
+      it('should not warn when license is in skill.json', () => {
+        createValidSkillMd();
+        createSkillJson({
+          name: 'my-skill',
+          version: '1.0.0',
+          description: 'A skill',
+          license: 'MIT',
+        });
+
+        const result = validator.validate(tempDir);
+        expect(result.warnings.some((w) => w.field === 'license')).toBe(false);
+      });
+    });
+
+    describe('entry file validation', () => {
       it('should fail when custom entry file does not exist', () => {
+        createValidSkillMd();
         createSkillJson({
           name: 'my-skill',
           version: '1.0.0',
@@ -476,6 +508,7 @@ Content`);
       });
 
       it('should pass when custom entry file exists', () => {
+        createValidSkillMd();
         createSkillJson({
           name: 'my-skill',
           version: '1.0.0',
@@ -495,7 +528,8 @@ Content`);
   // ============================================================================
 
   describe('loadSkill', () => {
-    it('should load skill.json content', () => {
+    it('should load skill.json content when present', () => {
+      createValidSkillMd();
       createSkillJson({
         name: 'my-skill',
         version: '1.0.0',
@@ -508,14 +542,10 @@ Content`);
       expect(skill.skillJson?.name).toBe('my-skill');
       expect(skill.skillJson?.version).toBe('1.0.0');
       expect(skill.skillJson?.keywords).toEqual(['test']);
+      expect(skill.synthesized).toBe(false);
     });
 
     it('should load SKILL.md content', () => {
-      createSkillJson({
-        name: 'my-skill',
-        version: '1.0.0',
-        description: 'A skill',
-      });
       createSkillMd(`---
 name: my-skill
 description: A test skill
@@ -525,14 +555,42 @@ description: A test skill
       const skill = validator.loadSkill(tempDir);
       expect(skill.skillMd).not.toBeNull();
       expect(skill.skillMd?.name).toBe('my-skill');
+      expect(skill.skillMd?.description).toBe('A test skill');
     });
 
-    it('should return null skillJson when file does not exist', () => {
+    it('should synthesize skillJson from SKILL.md when skill.json not present', () => {
+      createValidSkillMd('test-skill', 'Test description');
+
+      const skill = validator.loadSkill(tempDir);
+      expect(skill.skillJson).not.toBeNull();
+      expect(skill.skillJson?.name).toBe('test-skill');
+      expect(skill.skillJson?.description).toBe('Test description');
+      expect(skill.skillJson?.version).toBe('0.0.0'); // Default version
+      expect(skill.synthesized).toBe(true);
+    });
+
+    it('should use version from SKILL.md metadata when synthesizing', () => {
+      createSkillMd(`---
+name: my-skill
+description: A test skill
+metadata:
+  version: "2.0.0"
+---
+# Content`);
+
+      const skill = validator.loadSkill(tempDir);
+      expect(skill.skillJson).not.toBeNull();
+      expect(skill.skillJson?.version).toBe('2.0.0');
+      expect(skill.synthesized).toBe(true);
+    });
+
+    it('should return null skillJson when neither file exists', () => {
       const skill = validator.loadSkill(tempDir);
       expect(skill.skillJson).toBeNull();
+      expect(skill.skillMd).toBeNull();
     });
 
-    it('should return null skillMd when file does not exist', () => {
+    it('should return null skillMd when SKILL.md does not exist', () => {
       createSkillJson({
         name: 'my-skill',
         version: '1.0.0',
@@ -541,15 +599,17 @@ description: A test skill
 
       const skill = validator.loadSkill(tempDir);
       expect(skill.skillMd).toBeNull();
+      expect(skill.skillJson).not.toBeNull();
+      expect(skill.synthesized).toBe(false);
     });
 
     it('should scan files list', () => {
+      createValidSkillMd();
       createSkillJson({
         name: 'my-skill',
         version: '1.0.0',
         description: 'A skill',
       });
-      createSkillMd('---\nname: my-skill\ndescription: test\n---\n# Test');
       fs.writeFileSync(path.join(tempDir, 'README.md'), '# README');
 
       const skill = validator.loadSkill(tempDir);
@@ -558,7 +618,16 @@ description: A test skill
       expect(skill.files).toContain('README.md');
     });
 
+    it('should include SKILL.md in files when only SKILL.md exists', () => {
+      createValidSkillMd();
+
+      const skill = validator.loadSkill(tempDir);
+      expect(skill.files).toContain('SKILL.md');
+      expect(skill.files).not.toContain('skill.json');
+    });
+
     it('should include files from skill.json files array', () => {
+      createValidSkillMd();
       fs.mkdirSync(path.join(tempDir, 'examples'));
       fs.writeFileSync(path.join(tempDir, 'examples', 'basic.md'), '# Basic');
       createSkillJson({

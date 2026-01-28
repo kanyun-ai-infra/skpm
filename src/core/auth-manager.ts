@@ -15,6 +15,7 @@ import * as path from 'node:path';
 export interface RegistryAuth {
   token: string;
   email?: string;
+  handle?: string;
 }
 
 export interface ReskillConfig {
@@ -101,9 +102,23 @@ export class AuthManager {
   }
 
   /**
+   * Get handle for a registry
+   */
+  getHandle(registry?: string): string | undefined {
+    const config = this.readConfig();
+    if (!config?.registries) {
+      return undefined;
+    }
+
+    const targetRegistry = registry || this.getDefaultRegistry();
+    const auth = config.registries[targetRegistry];
+    return auth?.handle;
+  }
+
+  /**
    * Set token for a registry
    */
-  setToken(token: string, registry?: string, email?: string): void {
+  setToken(token: string, registry?: string, email?: string, handle?: string): void {
     const config = this.readConfig() || {};
     const targetRegistry = registry || this.getDefaultRegistry();
 
@@ -114,6 +129,7 @@ export class AuthManager {
     config.registries[targetRegistry] = {
       token,
       ...(email && { email }),
+      ...(handle && { handle }),
     };
 
     this.writeConfig(config);
