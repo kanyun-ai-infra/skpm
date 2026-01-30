@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import { createInterface } from 'node:readline';
 import { Command } from 'commander';
 import { AuthManager } from '../../core/auth-manager.js';
+import { ConfigLoader } from '../../core/config-loader.js';
 import { Publisher, PublishError, type GitInfo, type PublishPayload } from '../../core/publisher.js';
 import { RegistryClient, RegistryError } from '../../core/registry-client.js';
 import {
@@ -35,11 +36,106 @@ interface PublishOptions {
 // Constants
 // ============================================================================
 
-const DEFAULT_REGISTRY = 'https://registry.reskill.dev';
+/**
+ * Blocked public registries - CLI publishing is not allowed to these registries.
+ * Users should use the web interface at reskill.info to publish to the public registry.
+ */
+const BLOCKED_PUBLIC_REGISTRIES = [
+  'reskill.info',
+  'www.reskill.info',
+  'registry.reskill.info',
+  'api.reskill.info',
+];
 
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+/**
+ * Check if a registry URL is a blocked public registry
+ * @internal Exported for testing
+ */
+export function isBlockedPublicRegistry(registryUrl: string): boolean {
+  try {
+    const url = new URL(registryUrl);
+    const hostname = url.hostname.toLowerCase();
+    return BLOCKED_PUBLIC_REGISTRIES.some(blocked => 
+      hostname === blocked || hostname.endsWith(`.${blocked}`)
+    );
+  } catch {
+    // If URL parsing fails, check if the string contains blocked domains
+    const lowerUrl = registryUrl.toLowerCase();
+    return BLOCKED_PUBLIC_REGISTRIES.some(blocked => lowerUrl.includes(blocked));
+  }
+}
+
+/**
+ * Validate that the registry is not a blocked public registry
+ */
+function validateRegistry(registry: string): void {
+  if (isBlockedPublicRegistry(registry)) {
+    logger.error('Publishing to the public registry is not supported via CLI');
+    logger.newline();
+    logger.log('The reskill CLI only supports publishing to private registries.');
+    logger.log('To publish to the public registry, please use the web interface:');
+    logger.log('  → https://reskill.info/submit');
+    logger.newline();
+    logger.log('For private registry publishing, configure your registry:');
+    logger.log('  • --registry <your-private-registry-url>');
+    logger.log('  • RESKILL_REGISTRY environment variable');
+    logger.log('  • "defaults.publishRegistry" in skills.json');
+    process.exit(1);
+  }
+}
+
+/**
+ * Resolve registry URL from multiple sources
+ *
+ * Priority (highest to lowest):
+ * 1. --registry CLI option
+ * 2. RESKILL_REGISTRY environment variable
+ * 3. defaults.publishRegistry in skills.json
+ *
+ * Intentionally has NO default - users must explicitly configure their registry
+ * to prevent accidental publishing to unintended registries.
+ */
+function resolveRegistry(cliRegistry: string | undefined, projectRoot: string): string {
+  // 1. CLI option (highest priority)
+  if (cliRegistry) {
+    return cliRegistry;
+  }
+
+  // 2. Environment variable
+  const envRegistry = process.env.RESKILL_REGISTRY;
+  if (envRegistry) {
+    return envRegistry;
+  }
+
+  // 3. From skills.json
+  const configLoader = new ConfigLoader(projectRoot);
+  if (configLoader.exists()) {
+    const publishRegistry = configLoader.getPublishRegistry();
+    if (publishRegistry) {
+      return publishRegistry;
+    }
+  }
+
+  // No registry configured - error
+  logger.error('No registry specified');
+  logger.newline();
+  logger.log('Please specify a registry using one of these methods:');
+  logger.log('  • --registry <url> option');
+  logger.log('  • RESKILL_REGISTRY environment variable');
+  logger.log('  • "defaults.publishRegistry" in skills.json');
+  logger.newline();
+  logger.log('Example skills.json configuration:');
+  logger.log('  {');
+  logger.log('    "defaults": {');
+  logger.log('      "publishRegistry": "https://your-registry.example.com"');
+  logger.log('    }');
+  logger.log('  }');
+  process.exit(1);
+}
 
 /**
  * Check authentication
@@ -272,8 +368,11 @@ async function publishAction(
   skillPath: string,
   options: PublishOptions,
 ): Promise<void> {
-  const registry = options.registry || DEFAULT_REGISTRY;
   const absolutePath = path.resolve(skillPath);
+  const registry = resolveRegistry(options.registry, absolutePath);
+
+  // Validate registry is not a blocked public registry
+  validateRegistry(registry);
 
   // Check directory exists
   if (!fs.existsSync(absolutePath)) {
@@ -456,7 +555,7 @@ export const publishCommand = new Command('publish')
   .alias('pub')
   .description('Publish a skill to the registry')
   .argument('[path]', 'Path to skill directory', '.')
-  .option('-r, --registry <url>', 'Registry URL', DEFAULT_REGISTRY)
+  .option('-r, --registry <url>', 'Registry URL (or set RESKILL_REGISTRY env var, or defaults.publishRegistry in skills.json)')
   .option('-t, --tag <tag>', 'Git tag to publish')
   .option('--access <level>', 'Access level: public or restricted', 'public')
   .option('-n, --dry-run', 'Validate without publishing')

@@ -26,7 +26,6 @@ export interface ReskillConfig {
 // Constants
 // ============================================================================
 
-const DEFAULT_REGISTRY = 'https://registry.reskill.dev';
 const CONFIG_FILE_NAME = '.reskillrc';
 
 // ============================================================================
@@ -42,10 +41,13 @@ export class AuthManager {
   }
 
   /**
-   * Get the default registry URL
+   * Get the default registry URL from environment variable
+   *
+   * Returns undefined if no registry is configured - there is no hardcoded default
+   * to prevent accidental publishing to unintended registries.
    */
-  getDefaultRegistry(): string {
-    return process.env.RESKILL_REGISTRY || DEFAULT_REGISTRY;
+  getDefaultRegistry(): string | undefined {
+    return process.env.RESKILL_REGISTRY;
   }
 
   /**
@@ -76,6 +78,9 @@ export class AuthManager {
     }
 
     const targetRegistry = registry || this.getDefaultRegistry();
+    if (!targetRegistry) {
+      return undefined;
+    }
     const auth = config.registries[targetRegistry];
     return auth?.token;
   }
@@ -97,6 +102,9 @@ export class AuthManager {
     }
 
     const targetRegistry = registry || this.getDefaultRegistry();
+    if (!targetRegistry) {
+      return undefined;
+    }
     const auth = config.registries[targetRegistry];
     return auth?.email;
   }
@@ -111,16 +119,27 @@ export class AuthManager {
     }
 
     const targetRegistry = registry || this.getDefaultRegistry();
+    if (!targetRegistry) {
+      return undefined;
+    }
     const auth = config.registries[targetRegistry];
     return auth?.handle;
   }
 
   /**
    * Set token for a registry
+   *
+   * Note: When no registry is specified and RESKILL_REGISTRY env var is not set,
+   * this method will throw an error. The calling code should ensure a registry
+   * is always provided (either explicitly or via environment variable).
    */
   setToken(token: string, registry?: string, email?: string, handle?: string): void {
     const config = this.readConfig() || {};
     const targetRegistry = registry || this.getDefaultRegistry();
+
+    if (!targetRegistry) {
+      throw new Error('No registry specified. Set RESKILL_REGISTRY environment variable or provide registry explicitly.');
+    }
 
     if (!config.registries) {
       config.registries = {};
@@ -145,6 +164,9 @@ export class AuthManager {
     }
 
     const targetRegistry = registry || this.getDefaultRegistry();
+    if (!targetRegistry) {
+      return;
+    }
     delete config.registries[targetRegistry];
 
     this.writeConfig(config);

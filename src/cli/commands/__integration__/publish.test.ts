@@ -20,6 +20,9 @@ import {
   runCli,
 } from './helpers.js';
 
+// Test registry URL (a private registry for testing)
+const TEST_REGISTRY = 'https://test-registry.example.com';
+
 describe('CLI Integration: publish', () => {
   let tempDir: string;
 
@@ -107,7 +110,7 @@ This is the skill content.`);
 
   describe('--dry-run: SKILL.md validation (required)', () => {
     it('should fail without SKILL.md', () => {
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(1);
       expect(getOutput(result)).toContain('SKILL.md');
@@ -117,7 +120,7 @@ This is the skill content.`);
     it('should fail when SKILL.md has no frontmatter', () => {
       createSkillMd('# My Skill\n\nNo frontmatter here.');
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(1);
       expect(getOutput(result)).toContain('frontmatter');
@@ -129,7 +132,7 @@ description: Test skill
 ---
 # Content`);
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(1);
       expect(getOutput(result)).toContain('SKILL.md');
@@ -141,7 +144,7 @@ name: my-skill
 ---
 # Content`);
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(1);
       expect(getOutput(result)).toContain('SKILL.md');
@@ -154,7 +157,7 @@ description: Test skill
 ---
 # Content`);
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(1);
       expect(getOutput(result)).toContain('lowercase');
@@ -167,7 +170,7 @@ description: Test skill
 ---
 # Content`);
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(1);
     });
@@ -175,7 +178,7 @@ description: Test skill
     it('should pass with valid SKILL.md only (no skill.json)', () => {
       createValidSkillMd();
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('Dry run');
@@ -186,7 +189,7 @@ description: Test skill
     it('should show warning about missing skill.json', () => {
       createValidSkillMd();
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('skill.json');
@@ -203,7 +206,7 @@ description: Test skill
       createValidSkillMd();
       fs.writeFileSync(path.join(tempDir, 'skill.json'), '{ invalid json }');
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(1);
       expect(getOutput(result)).toContain('skill.json');
@@ -217,7 +220,7 @@ description: Test skill
         description: 'Test skill',
       });
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(1);
       expect(getOutput(result)).toContain('semver');
@@ -231,7 +234,7 @@ description: Test skill
         description: 'Test skill',
       });
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(1);
       expect(getOutput(result)).toContain('mismatch');
@@ -245,7 +248,7 @@ description: Test skill
         description: 'A helpful AI skill',
       });
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('Dry run');
@@ -268,7 +271,7 @@ description: Test skill
         description: 'Test skill',
       });
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('SKILL.md found');
@@ -283,7 +286,7 @@ description: Test skill
         description: 'Test skill',
       });
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('2.5.0');
@@ -300,7 +303,7 @@ description: Test skill
       initGitRepo();
       gitCommit();
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('Commit');
@@ -312,7 +315,7 @@ description: Test skill
       gitCommit();
       gitTag('v1.0.0');
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('v1.0.0');
@@ -324,7 +327,7 @@ description: Test skill
       gitCommit();
       setRemote('https://github.com/user/my-skill.git');
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('github.com');
@@ -338,7 +341,7 @@ description: Test skill
       // Create uncommitted file
       fs.writeFileSync(path.join(tempDir, 'uncommitted.txt'), 'uncommitted content');
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('uncommitted');
@@ -355,7 +358,7 @@ description: Test skill
       gitCommit('second commit');
       gitTag('v2.0.0');
 
-      const result = runCli('publish --dry-run --tag v1.0.0', tempDir);
+      const result = runCli(`publish --dry-run --tag v1.0.0 --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('v1.0.0');
@@ -366,7 +369,7 @@ description: Test skill
       initGitRepo();
       gitCommit();
 
-      const result = runCli('publish --dry-run --tag v999.0.0', tempDir);
+      const result = runCli(`publish --dry-run --tag v999.0.0 --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(1);
       expect(getOutput(result)).toContain('not found');
@@ -375,7 +378,7 @@ description: Test skill
     it('should work without git repository', () => {
       createValidSkillMd();
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       // Should pass but without git info
       expect(result.exitCode).toBe(0);
@@ -395,7 +398,7 @@ description: Test skill
         description: 'Test skill',
       });
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('skill.json');
@@ -414,7 +417,7 @@ description: Test skill
         files: ['examples/'],
       });
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('examples');
@@ -423,7 +426,7 @@ description: Test skill
     it('should show total file count and size', () => {
       createValidSkillMd();
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toMatch(/\d+ files?/);
@@ -438,7 +441,7 @@ description: Test skill
     it('should display integrity hash', () => {
       createValidSkillMd();
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toMatch(/sha256-[a-f0-9]{64}/);
@@ -459,7 +462,7 @@ description: Test skill
         keywords: ['typescript', 'testing', 'ai'],
       });
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('typescript');
@@ -474,7 +477,7 @@ license: MIT
 ---
 # Content`);
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('MIT');
@@ -489,7 +492,7 @@ license: MIT
         license: 'Apache-2.0',
       });
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('Apache-2.0');
@@ -507,11 +510,92 @@ license: MIT
         },
       });
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('cursor');
       expect(getOutput(result)).toContain('>=0.40');
+    });
+  });
+
+  // ============================================================================
+  // Blocked public registry
+  // ============================================================================
+
+  describe('blocked public registry', () => {
+    it('should block publishing to reskill.info', () => {
+      createValidSkillMd();
+
+      const result = runCli('publish --dry-run --registry https://reskill.info', tempDir);
+
+      expect(result.exitCode).toBe(1);
+      expect(getOutput(result)).toContain('public registry is not supported');
+      expect(getOutput(result)).toContain('web interface');
+    });
+
+    it('should block publishing to www.reskill.info', () => {
+      createValidSkillMd();
+
+      const result = runCli('publish --dry-run --registry https://www.reskill.info', tempDir);
+
+      expect(result.exitCode).toBe(1);
+      expect(getOutput(result)).toContain('public registry is not supported');
+    });
+
+    it('should block publishing to api.reskill.info', () => {
+      createValidSkillMd();
+
+      const result = runCli('publish --dry-run --registry https://api.reskill.info/v1', tempDir);
+
+      expect(result.exitCode).toBe(1);
+      expect(getOutput(result)).toContain('public registry is not supported');
+    });
+
+    it('should block publishing to registry.reskill.info', () => {
+      createValidSkillMd();
+
+      const result = runCli('publish --dry-run --registry https://registry.reskill.info', tempDir);
+
+      expect(result.exitCode).toBe(1);
+      expect(getOutput(result)).toContain('public registry is not supported');
+    });
+
+    it('should block publishing to subdomain of reskill.info', () => {
+      createValidSkillMd();
+
+      const result = runCli('publish --dry-run --registry https://subdomain.api.reskill.info', tempDir);
+
+      expect(result.exitCode).toBe(1);
+      expect(getOutput(result)).toContain('public registry is not supported');
+    });
+
+    it('should allow publishing to private registry', () => {
+      createValidSkillMd();
+
+      const result = runCli('publish --dry-run --registry https://reskill-test.zhenguanyu.com', tempDir);
+
+      expect(result.exitCode).toBe(0);
+      expect(getOutput(result)).toContain('Dry run');
+      expect(getOutput(result)).toContain('No changes made');
+    });
+
+    it('should allow publishing to other private domains', () => {
+      createValidSkillMd();
+
+      const result = runCli('publish --dry-run --registry https://my-private-registry.example.com', tempDir);
+
+      expect(result.exitCode).toBe(0);
+      expect(getOutput(result)).toContain('Dry run');
+    });
+
+    it('should show helpful message when blocked', () => {
+      createValidSkillMd();
+
+      const result = runCli('publish --dry-run --registry https://reskill.info', tempDir);
+
+      expect(result.exitCode).toBe(1);
+      expect(getOutput(result)).toContain('reskill.info/submit');
+      expect(getOutput(result)).toContain('private registries');
     });
   });
 
@@ -523,7 +607,7 @@ license: MIT
     it('should fail without token when not using --dry-run', () => {
       createValidSkillMd();
 
-      const result = runCli('publish --yes', tempDir);
+      const result = runCli('publish --yes --registry https://private.registry.com', tempDir);
 
       expect(result.exitCode).not.toBe(0);
       expect(getOutput(result)).toContain('login');
@@ -532,7 +616,7 @@ license: MIT
     it('should not require auth for --dry-run', () => {
       createValidSkillMd();
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli('publish --dry-run --registry https://private.registry.com', tempDir);
 
       expect(result.exitCode).toBe(0);
       // Should not mention login
@@ -556,14 +640,14 @@ description: A skill in subdirectory
 # Sub Skill`,
       );
 
-      const result = runCli(`publish ${subDir} --dry-run`, tempDir);
+      const result = runCli(`publish ${subDir} --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
       expect(getOutput(result)).toContain('sub-skill');
     });
 
     it('should fail with non-existent directory', () => {
-      const result = runCli('publish /nonexistent/path --dry-run', tempDir);
+      const result = runCli(`publish /nonexistent/path --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(1);
     });
@@ -583,7 +667,7 @@ description: A skill in subdirectory
         entry: 'CUSTOM.md',
       });
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(1);
       expect(getOutput(result)).toContain('entry');
@@ -600,9 +684,27 @@ description: A skill in subdirectory
       });
       fs.writeFileSync(path.join(tempDir, 'CUSTOM.md'), '# Custom Entry');
 
-      const result = runCli('publish --dry-run', tempDir);
+      const result = runCli(`publish --dry-run --registry ${TEST_REGISTRY}`, tempDir);
 
       expect(result.exitCode).toBe(0);
+    });
+  });
+
+  // ============================================================================
+  // No registry specified
+  // ============================================================================
+
+  describe('no registry specified', () => {
+    it('should fail when no registry is configured', () => {
+      createValidSkillMd();
+
+      const result = runCli('publish --dry-run', tempDir);
+
+      expect(result.exitCode).toBe(1);
+      expect(getOutput(result)).toContain('No registry specified');
+      expect(getOutput(result)).toContain('--registry');
+      expect(getOutput(result)).toContain('RESKILL_REGISTRY');
+      expect(getOutput(result)).toContain('publishRegistry');
     });
   });
 });

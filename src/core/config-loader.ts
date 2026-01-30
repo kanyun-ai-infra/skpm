@@ -21,11 +21,13 @@ const DEFAULT_SKILLS_JSON: SkillsJson = {
 
 /**
  * Default values for SkillsDefaults fields
+ * Note: publishRegistry has no default - must be explicitly configured
  */
-const DEFAULT_VALUES: Required<SkillsDefaults> = {
+const DEFAULT_VALUES: Omit<Required<SkillsDefaults>, 'publishRegistry'> & { publishRegistry: undefined } = {
   installDir: '.skills',
   targetAgents: [],
   installMode: 'symlink',
+  publishRegistry: undefined,
 };
 
 /**
@@ -197,8 +199,9 @@ export class ConfigLoader {
    *
    * Returns a complete defaults object with all fields populated.
    * Uses stored values if available, falls back to defaults.
+   * Note: publishRegistry may be undefined (no default value).
    */
-  getDefaults(): Required<SkillsDefaults> {
+  getDefaults(): Omit<Required<SkillsDefaults>, 'publishRegistry'> & { publishRegistry: string | undefined } {
     const config = this.getConfigOrDefault();
     const storedDefaults = config.defaults ?? {};
 
@@ -206,7 +209,20 @@ export class ConfigLoader {
       installDir: storedDefaults.installDir ?? DEFAULT_VALUES.installDir,
       targetAgents: storedDefaults.targetAgents ?? DEFAULT_VALUES.targetAgents,
       installMode: storedDefaults.installMode ?? DEFAULT_VALUES.installMode,
+      publishRegistry: storedDefaults.publishRegistry,
     };
+  }
+
+  /**
+   * Get publish registry URL
+   *
+   * Returns the configured publish registry URL, or undefined if not configured.
+   * This intentionally has no default value - users must explicitly configure
+   * their registry to prevent accidental publishing to unintended registries.
+   */
+  getPublishRegistry(): string | undefined {
+    const config = this.getConfigOrDefault();
+    return config.defaults?.publishRegistry;
   }
 
   /**

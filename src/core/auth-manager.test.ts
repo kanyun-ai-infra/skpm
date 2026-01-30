@@ -78,38 +78,41 @@ describe('AuthManager', () => {
       expect(manager.getToken()).toBe('env_token_123');
     });
 
-    it('should return token from ~/.reskillrc', () => {
+    it('should return token from ~/.reskillrc for specific registry', () => {
+      const testRegistry = 'https://test.registry.com';
       createReskillrc({
         registries: {
-          'https://registry.reskill.dev': {
+          [testRegistry]: {
             token: 'file_token_456',
           },
         },
       });
 
       const manager = new AuthManager();
-      expect(manager.getToken()).toBe('file_token_456');
+      expect(manager.getToken(testRegistry)).toBe('file_token_456');
     });
 
     it('should prefer RESKILL_TOKEN over ~/.reskillrc', () => {
+      const testRegistry = 'https://test.registry.com';
       process.env.RESKILL_TOKEN = 'env_token_123';
       createReskillrc({
         registries: {
-          'https://registry.reskill.dev': {
+          [testRegistry]: {
             token: 'file_token_456',
           },
         },
       });
 
       const manager = new AuthManager();
-      expect(manager.getToken()).toBe('env_token_123');
+      // RESKILL_TOKEN takes priority regardless of registry
+      expect(manager.getToken(testRegistry)).toBe('env_token_123');
     });
 
     it('should return token for specific registry', () => {
       createReskillrc({
         registries: {
-          'https://registry.reskill.dev': {
-            token: 'default_token',
+          'https://primary.registry.com': {
+            token: 'primary_token',
           },
           'https://custom.registry.com': {
             token: 'custom_token',
@@ -124,8 +127,8 @@ describe('AuthManager', () => {
     it('should return undefined for unknown registry', () => {
       createReskillrc({
         registries: {
-          'https://registry.reskill.dev': {
-            token: 'default_token',
+          'https://known.registry.com': {
+            token: 'known_token',
           },
         },
       });
@@ -148,18 +151,35 @@ describe('AuthManager', () => {
       expect(manager.getToken()).toBeUndefined();
     });
 
-    it('should use default registry when not specified', () => {
+    it('should use RESKILL_REGISTRY env var when registry not specified', () => {
+      const envRegistry = 'https://env.registry.com';
+      process.env.RESKILL_REGISTRY = envRegistry;
+
       createReskillrc({
         registries: {
-          'https://registry.reskill.dev': {
-            token: 'default_token',
+          [envRegistry]: {
+            token: 'env_registry_token',
           },
         },
       });
 
       const manager = new AuthManager();
-      // Should use default registry
-      expect(manager.getToken()).toBe('default_token');
+      // Should use registry from RESKILL_REGISTRY env var
+      expect(manager.getToken()).toBe('env_registry_token');
+    });
+
+    it('should return undefined when no registry specified and no env var', () => {
+      createReskillrc({
+        registries: {
+          'https://some.registry.com': {
+            token: 'some_token',
+          },
+        },
+      });
+
+      const manager = new AuthManager();
+      // No registry specified, no RESKILL_REGISTRY env var - should return undefined
+      expect(manager.getToken()).toBeUndefined();
     });
   });
 
@@ -169,18 +189,37 @@ describe('AuthManager', () => {
 
   describe('setToken', () => {
     it('should create ~/.reskillrc if not exists', () => {
+      const testRegistry = 'https://test.registry.com';
       const manager = new AuthManager();
-      manager.setToken('new_token_123');
+      manager.setToken('new_token_123', testRegistry);
 
       expect(fs.existsSync(path.join(tempDir, '.reskillrc'))).toBe(true);
     });
 
-    it('should save token to default registry', () => {
+    it('should throw error when no registry specified and no env var', () => {
+      const manager = new AuthManager();
+      expect(() => manager.setToken('new_token')).toThrow('No registry specified');
+    });
+
+    it('should save token to specified registry', () => {
+      const testRegistry = 'https://test.registry.com';
+
+      const manager = new AuthManager();
+      manager.setToken('new_token_123', testRegistry);
+
+      const config = readReskillrc() as { registries: Record<string, { token: string }> };
+      expect(config.registries[testRegistry].token).toBe('new_token_123');
+    });
+
+    it('should save token to env var registry when no registry specified', () => {
+      const envRegistry = 'https://env.registry.com';
+      process.env.RESKILL_REGISTRY = envRegistry;
+
       const manager = new AuthManager();
       manager.setToken('new_token_123');
 
       const config = readReskillrc() as { registries: Record<string, { token: string }> };
-      expect(config.registries['https://registry.reskill.dev'].token).toBe('new_token_123');
+      expect(config.registries[envRegistry].token).toBe('new_token_123');
     });
 
     it('should save token to specific registry', () => {
@@ -210,29 +249,31 @@ describe('AuthManager', () => {
     });
 
     it('should overwrite existing token for same registry', () => {
+      const testRegistry = 'https://test.registry.com';
       createReskillrc({
         registries: {
-          'https://registry.reskill.dev': {
+          [testRegistry]: {
             token: 'old_token',
           },
         },
       });
 
       const manager = new AuthManager();
-      manager.setToken('new_token');
+      manager.setToken('new_token', testRegistry);
 
       const config = readReskillrc() as { registries: Record<string, { token: string }> };
-      expect(config.registries['https://registry.reskill.dev'].token).toBe('new_token');
+      expect(config.registries[testRegistry].token).toBe('new_token');
     });
 
     it('should save email if provided', () => {
+      const testRegistry = 'https://test.registry.com';
       const manager = new AuthManager();
-      manager.setToken('token', undefined, 'user@example.com');
+      manager.setToken('token', testRegistry, 'user@example.com');
 
       const config = readReskillrc() as {
         registries: Record<string, { token: string; email?: string }>;
       };
-      expect(config.registries['https://registry.reskill.dev'].email).toBe('user@example.com');
+      expect(config.registries[testRegistry].email).toBe('user@example.com');
     });
   });
 
@@ -241,10 +282,30 @@ describe('AuthManager', () => {
   // ============================================================================
 
   describe('removeToken', () => {
-    it('should remove token for default registry', () => {
+    it('should remove token for specified registry', () => {
+      const testRegistry = 'https://test.registry.com';
       createReskillrc({
         registries: {
-          'https://registry.reskill.dev': {
+          [testRegistry]: {
+            token: 'token_to_remove',
+          },
+        },
+      });
+
+      const manager = new AuthManager();
+      manager.removeToken(testRegistry);
+
+      const config = readReskillrc() as { registries: Record<string, unknown> };
+      expect(config.registries[testRegistry]).toBeUndefined();
+    });
+
+    it('should remove token for env var registry when not specified', () => {
+      const envRegistry = 'https://env.registry.com';
+      process.env.RESKILL_REGISTRY = envRegistry;
+
+      createReskillrc({
+        registries: {
+          [envRegistry]: {
             token: 'token_to_remove',
           },
         },
@@ -254,14 +315,14 @@ describe('AuthManager', () => {
       manager.removeToken();
 
       const config = readReskillrc() as { registries: Record<string, unknown> };
-      expect(config.registries['https://registry.reskill.dev']).toBeUndefined();
+      expect(config.registries[envRegistry]).toBeUndefined();
     });
 
-    it('should remove token for specific registry', () => {
+    it('should remove only specific registry token', () => {
       createReskillrc({
         registries: {
-          'https://registry.reskill.dev': {
-            token: 'default_token',
+          'https://primary.registry.com': {
+            token: 'primary_token',
           },
           'https://custom.registry.com': {
             token: 'custom_token',
@@ -273,7 +334,7 @@ describe('AuthManager', () => {
       manager.removeToken('https://custom.registry.com');
 
       const config = readReskillrc() as { registries: Record<string, { token: string }> };
-      expect(config.registries['https://registry.reskill.dev'].token).toBe('default_token');
+      expect(config.registries['https://primary.registry.com'].token).toBe('primary_token');
       expect(config.registries['https://custom.registry.com']).toBeUndefined();
     });
 
@@ -293,7 +354,7 @@ describe('AuthManager', () => {
   // ============================================================================
 
   describe('hasToken', () => {
-    it('should return false when no token', () => {
+    it('should return false when no token and no registry specified', () => {
       const manager = new AuthManager();
       expect(manager.hasToken()).toBe(false);
     });
@@ -305,30 +366,32 @@ describe('AuthManager', () => {
       expect(manager.hasToken()).toBe(true);
     });
 
-    it('should return true when token from config file', () => {
+    it('should return true when token from config file for specific registry', () => {
+      const testRegistry = 'https://test.registry.com';
       createReskillrc({
         registries: {
-          'https://registry.reskill.dev': {
+          [testRegistry]: {
             token: 'file_token',
           },
         },
       });
 
       const manager = new AuthManager();
-      expect(manager.hasToken()).toBe(true);
+      expect(manager.hasToken(testRegistry)).toBe(true);
     });
 
     it('should check specific registry', () => {
+      const testRegistry = 'https://test.registry.com';
       createReskillrc({
         registries: {
-          'https://registry.reskill.dev': {
-            token: 'default_token',
+          [testRegistry]: {
+            token: 'test_token',
           },
         },
       });
 
       const manager = new AuthManager();
-      expect(manager.hasToken('https://registry.reskill.dev')).toBe(true);
+      expect(manager.hasToken(testRegistry)).toBe(true);
       expect(manager.hasToken('https://other.registry.com')).toBe(false);
     });
   });
@@ -338,9 +401,9 @@ describe('AuthManager', () => {
   // ============================================================================
 
   describe('getDefaultRegistry', () => {
-    it('should return default registry URL', () => {
+    it('should return undefined when no env var set', () => {
       const manager = new AuthManager();
-      expect(manager.getDefaultRegistry()).toBe('https://registry.reskill.dev');
+      expect(manager.getDefaultRegistry()).toBeUndefined();
     });
 
     it('should return RESKILL_REGISTRY env var if set', () => {
@@ -367,10 +430,11 @@ describe('AuthManager', () => {
   // ============================================================================
 
   describe('getEmail', () => {
-    it('should return email from config', () => {
+    it('should return email from config for specific registry', () => {
+      const testRegistry = 'https://test.registry.com';
       createReskillrc({
         registries: {
-          'https://registry.reskill.dev': {
+          [testRegistry]: {
             token: 'token',
             email: 'user@example.com',
           },
@@ -378,28 +442,29 @@ describe('AuthManager', () => {
       });
 
       const manager = new AuthManager();
-      expect(manager.getEmail()).toBe('user@example.com');
+      expect(manager.getEmail(testRegistry)).toBe('user@example.com');
     });
 
     it('should return undefined when no email', () => {
+      const testRegistry = 'https://test.registry.com';
       createReskillrc({
         registries: {
-          'https://registry.reskill.dev': {
+          [testRegistry]: {
             token: 'token',
           },
         },
       });
 
       const manager = new AuthManager();
-      expect(manager.getEmail()).toBeUndefined();
+      expect(manager.getEmail(testRegistry)).toBeUndefined();
     });
 
-    it('should return email for specific registry', () => {
+    it('should return email for specific registry from multiple', () => {
       createReskillrc({
         registries: {
-          'https://registry.reskill.dev': {
+          'https://primary.registry.com': {
             token: 'token1',
-            email: 'default@example.com',
+            email: 'primary@example.com',
           },
           'https://custom.registry.com': {
             token: 'token2',

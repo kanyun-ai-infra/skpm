@@ -6,6 +6,7 @@
 
 import { Command } from 'commander';
 import { AuthManager } from '../../core/auth-manager.js';
+import { ConfigLoader } from '../../core/config-loader.js';
 import { RegistryClient, RegistryError } from '../../core/registry-client.js';
 import { logger } from '../../utils/logger.js';
 
@@ -18,17 +19,49 @@ interface WhoamiOptions {
 }
 
 // ============================================================================
-// Constants
+// Helper Functions
 // ============================================================================
 
-const DEFAULT_REGISTRY = 'https://registry.reskill.dev';
+/**
+ * Resolve registry URL from multiple sources
+ */
+function resolveRegistry(cliRegistry: string | undefined): string {
+  // 1. CLI option (highest priority)
+  if (cliRegistry) {
+    return cliRegistry;
+  }
+
+  // 2. Environment variable
+  const envRegistry = process.env.RESKILL_REGISTRY;
+  if (envRegistry) {
+    return envRegistry;
+  }
+
+  // 3. From skills.json (current directory)
+  const configLoader = new ConfigLoader(process.cwd());
+  if (configLoader.exists()) {
+    const publishRegistry = configLoader.getPublishRegistry();
+    if (publishRegistry) {
+      return publishRegistry;
+    }
+  }
+
+  // No registry configured - error
+  logger.error('No registry specified');
+  logger.newline();
+  logger.log('Please specify a registry using one of these methods:');
+  logger.log('  • --registry <url> option');
+  logger.log('  • RESKILL_REGISTRY environment variable');
+  logger.log('  • "defaults.publishRegistry" in skills.json');
+  process.exit(1);
+}
 
 // ============================================================================
 // Main Action
 // ============================================================================
 
 async function whoamiAction(options: WhoamiOptions): Promise<void> {
-  const registry = options.registry || process.env.RESKILL_REGISTRY || DEFAULT_REGISTRY;
+  const registry = resolveRegistry(options.registry);
   const authManager = new AuthManager();
 
   // Check if logged in locally
@@ -80,7 +113,7 @@ async function whoamiAction(options: WhoamiOptions): Promise<void> {
 
 export const whoamiCommand = new Command('whoami')
   .description('Show current authenticated user')
-  .option('-r, --registry <url>', 'Registry URL', DEFAULT_REGISTRY)
+  .option('-r, --registry <url>', 'Registry URL (or set RESKILL_REGISTRY env var, or defaults.publishRegistry in skills.json)')
   .action(whoamiAction);
 
 export default whoamiCommand;

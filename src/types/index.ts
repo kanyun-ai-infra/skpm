@@ -67,6 +67,8 @@ export interface SkillsDefaults {
   targetAgents?: string[];
   /** Installation mode: symlink | copy */
   installMode?: 'symlink' | 'copy';
+  /** Registry URL for publishing skills (no default - must be explicitly configured) */
+  publishRegistry?: string;
 }
 
 /**
