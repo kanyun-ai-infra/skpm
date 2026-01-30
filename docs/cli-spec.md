@@ -479,9 +479,9 @@ reskill pub [path] [options]
 
 | Scenario | Expected Behavior | Exit Code |
 |----------|-------------------|-----------|
-| Valid skill with skill.json | Publish metadata to registry | `0` |
-| Missing skill.json | Error: "skill.json not found" | `1` |
-| Missing SKILL.md | Warning, continue with skill.json only | `0` |
+| Valid skill with SKILL.md | Publish metadata to registry | `0` |
+| Missing skill.json | Warning, synthesize from SKILL.md | `0` |
+| Missing SKILL.md | Error: "SKILL.md not found" | `1` |
 | Invalid skill name format | Error with validation message | `1` |
 | Invalid version format | Error with validation message | `1` |
 | Missing required field | Error listing missing fields | `1` |

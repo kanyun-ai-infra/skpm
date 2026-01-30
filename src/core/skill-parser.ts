@@ -247,7 +247,7 @@ export function validateSkillName(name: string): void {
  *
  * Specification requirements:
  * - Max 1024 characters
- * - Cannot contain angle brackets
+ * - Angle brackets are allowed per agentskills.io spec
  */
 export function validateSkillDescription(description: string): void {
   if (!description) {
@@ -261,12 +261,7 @@ export function validateSkillDescription(description: string): void {
     );
   }
 
-  if (/<|>/.test(description)) {
-    throw new SkillValidationError(
-      'Skill description cannot contain angle brackets',
-      'description',
-    );
-  }
+  // Note: angle brackets are allowed per agentskills.io spec
 }
 
 /**

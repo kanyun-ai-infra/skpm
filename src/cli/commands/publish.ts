@@ -10,7 +10,6 @@ import * as path from 'node:path';
 import { createInterface } from 'node:readline';
 import { Command } from 'commander';
 import { AuthManager } from '../../core/auth-manager.js';
-import { ConfigLoader } from '../../core/config-loader.js';
 import { Publisher, PublishError, type GitInfo, type PublishPayload } from '../../core/publisher.js';
 import { RegistryClient, RegistryError } from '../../core/registry-client.js';
 import {
@@ -19,6 +18,7 @@ import {
   type ValidationResult,
 } from '../../core/skill-validator.js';
 import { logger } from '../../utils/logger.js';
+import { resolveRegistry } from '../../utils/registry.js';
 
 // ============================================================================
 // Types
@@ -86,55 +86,6 @@ function validateRegistry(registry: string): void {
     logger.log('  • "defaults.publishRegistry" in skills.json');
     process.exit(1);
   }
-}
-
-/**
- * Resolve registry URL from multiple sources
- *
- * Priority (highest to lowest):
- * 1. --registry CLI option
- * 2. RESKILL_REGISTRY environment variable
- * 3. defaults.publishRegistry in skills.json
- *
- * Intentionally has NO default - users must explicitly configure their registry
- * to prevent accidental publishing to unintended registries.
- */
-function resolveRegistry(cliRegistry: string | undefined, projectRoot: string): string {
-  // 1. CLI option (highest priority)
-  if (cliRegistry) {
-    return cliRegistry;
-  }
-
-  // 2. Environment variable
-  const envRegistry = process.env.RESKILL_REGISTRY;
-  if (envRegistry) {
-    return envRegistry;
-  }
-
-  // 3. From skills.json
-  const configLoader = new ConfigLoader(projectRoot);
-  if (configLoader.exists()) {
-    const publishRegistry = configLoader.getPublishRegistry();
-    if (publishRegistry) {
-      return publishRegistry;
-    }
-  }
-
-  // No registry configured - error
-  logger.error('No registry specified');
-  logger.newline();
-  logger.log('Please specify a registry using one of these methods:');
-  logger.log('  • --registry <url> option');
-  logger.log('  • RESKILL_REGISTRY environment variable');
-  logger.log('  • "defaults.publishRegistry" in skills.json');
-  logger.newline();
-  logger.log('Example skills.json configuration:');
-  logger.log('  {');
-  logger.log('    "defaults": {');
-  logger.log('      "publishRegistry": "https://your-registry.example.com"');
-  logger.log('    }');
-  logger.log('  }');
-  process.exit(1);
 }
 
 /**
@@ -498,9 +449,10 @@ async function publishAction(
         logger.log("Run 'reskill login' to authenticate.");
         process.exit(1);
       }
-      const skillName = skill.skillJson!.name.includes('/') 
-        ? skill.skillJson!.name 
-        : `@${handle}/${skill.skillJson!.name}`;
+      const name = skill.skillJson?.name ?? '';
+      const skillName = name.includes('/') 
+        ? name 
+        : `@${handle}/${name}`;
 
       const result = await client.publish(
         skillName,

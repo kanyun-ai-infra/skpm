@@ -77,10 +77,13 @@ describe('skill-parser', () => {
       expect(() => validateSkillDescription('')).toThrow(/required/i);
     });
 
-    it('should reject descriptions with angle brackets', () => {
-      expect(() => validateSkillDescription('A <script> skill')).toThrow(SkillValidationError);
-      expect(() => validateSkillDescription('Skill > other')).toThrow(SkillValidationError);
-      expect(() => validateSkillDescription('<html>')).toThrow(SkillValidationError);
+    it('should accept descriptions with angle brackets (per agentskills.io spec)', () => {
+      // Angle brackets are allowed per agentskills.io spec
+      expect(() => validateSkillDescription('A <script> skill')).not.toThrow();
+      expect(() => validateSkillDescription('Skill > other')).not.toThrow();
+      expect(() => validateSkillDescription('<html>')).not.toThrow();
+      expect(() => validateSkillDescription('Use <tool> for tasks')).not.toThrow();
+      expect(() => validateSkillDescription('Value > 10')).not.toThrow();
     });
 
     it('should reject descriptions longer than 1024 characters', () => {
