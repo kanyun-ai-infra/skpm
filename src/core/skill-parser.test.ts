@@ -77,10 +77,13 @@ describe('skill-parser', () => {
       expect(() => validateSkillDescription('')).toThrow(/required/i);
     });
 
-    it('should reject descriptions with angle brackets', () => {
-      expect(() => validateSkillDescription('A <script> skill')).toThrow(SkillValidationError);
-      expect(() => validateSkillDescription('Skill > other')).toThrow(SkillValidationError);
-      expect(() => validateSkillDescription('<html>')).toThrow(SkillValidationError);
+    it('should accept descriptions with angle brackets (per agentskills.io spec)', () => {
+      // Angle brackets are allowed per agentskills.io spec
+      expect(() => validateSkillDescription('A <script> skill')).not.toThrow();
+      expect(() => validateSkillDescription('Skill > other')).not.toThrow();
+      expect(() => validateSkillDescription('<html>')).not.toThrow();
+      expect(() => validateSkillDescription('Use <tool> for tasks')).not.toThrow();
+      expect(() => validateSkillDescription('Value > 10')).not.toThrow();
     });
 
     it('should reject descriptions longer than 1024 characters', () => {
@@ -247,6 +250,57 @@ description: A test skill
       expect(result).not.toBeNull();
       expect(result?.name).toBe('my-skill');
       expect(result?.content.trim()).toBe('');
+    });
+
+    it('should parse top-level version field in frontmatter', () => {
+      const content = `---
+name: my-skill
+description: A test skill
+version: "2.4.1"
+---
+
+# My Skill
+
+Content.
+`;
+
+      const result = parseSkillMd(content);
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe('my-skill');
+      expect(result?.version).toBe('2.4.1');
+    });
+
+    it('should parse version without quotes', () => {
+      const content = `---
+name: my-skill
+description: A test skill
+version: 1.0.0
+---
+
+Content.
+`;
+
+      const result = parseSkillMd(content);
+      expect(result).not.toBeNull();
+      expect(result?.version).toBe('1.0.0');
+    });
+
+    it('should prefer top-level version over metadata.version', () => {
+      const content = `---
+name: my-skill
+description: A test skill
+version: "2.0.0"
+metadata:
+  version: "1.0.0"
+---
+
+Content.
+`;
+
+      const result = parseSkillMd(content);
+      expect(result).not.toBeNull();
+      // Top-level version should take precedence
+      expect(result?.version).toBe('2.0.0');
     });
   });
 

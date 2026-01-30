@@ -21,6 +21,8 @@ export interface SkillMdFrontmatter {
   name: string;
   /** Skill description (required) */
   description: string;
+  /** Version (optional, semver format) */
+  version?: string;
   /** License */
   license?: string;
   /** Compatibility requirements */
@@ -39,6 +41,8 @@ export interface ParsedSkill {
   name: string;
   /** Skill description */
   description: string;
+  /** Version (optional, semver format) */
+  version?: string;
   /** License */
   license?: string;
   /** Compatibility requirements */
@@ -69,6 +73,11 @@ export class SkillValidationError extends Error {
 /**
  * Simple YAML frontmatter parser
  * Parses --- delimited YAML header
+ *
+ * Supports:
+ * - Basic key: value pairs
+ * - Multiline strings (| and >)
+ * - Nested objects (one level deep, for metadata field)
  */
 function parseFrontmatter(content: string): {
   data: Record<string, unknown>;
@@ -84,12 +93,14 @@ function parseFrontmatter(content: string): {
   const yamlContent = match[1];
   const markdownContent = match[2];
 
-  // Simple YAML parsing (supports basic key: value format)
+  // Simple YAML parsing (supports basic key: value format and one level of nesting)
   const data: Record<string, unknown> = {};
   const lines = yamlContent.split('\n');
   let currentKey = '';
   let currentValue = '';
   let inMultiline = false;
+  let inNestedObject = false;
+  let nestedObject: Record<string, unknown> = {};
 
   for (const line of lines) {
     const trimmedLine = line.trim();
@@ -98,12 +109,27 @@ function parseFrontmatter(content: string): {
       continue;
     }
 
-    // Check if it's a new key: value pair
+    // Check if it's a nested key: value pair (indented with 2 spaces)
+    const nestedMatch = line.match(/^  ([a-zA-Z_-]+):\s*(.*)$/);
+    if (nestedMatch && inNestedObject) {
+      const [, nestedKey, nestedValue] = nestedMatch;
+      nestedObject[nestedKey] = parseYamlValue(nestedValue.trim());
+      continue;
+    }
+
+    // Check if it's a new key: value pair (no indent)
     const keyValueMatch = line.match(/^([a-zA-Z_-]+):\s*(.*)$/);
 
     if (keyValueMatch && !inMultiline) {
+      // Save previous nested object if any
+      if (inNestedObject && currentKey) {
+        data[currentKey] = nestedObject;
+        nestedObject = {};
+        inNestedObject = false;
+      }
+
       // Save previous value
-      if (currentKey) {
+      if (currentKey && !inNestedObject) {
         data[currentKey] = parseYamlValue(currentValue.trim());
       }
 
@@ -114,6 +140,10 @@ function parseFrontmatter(content: string): {
       if (currentValue === '|' || currentValue === '>') {
         inMultiline = true;
         currentValue = '';
+      } else if (currentValue === '') {
+        // Empty value - might be start of nested object
+        inNestedObject = true;
+        nestedObject = {};
       }
     } else if (inMultiline && line.startsWith('  ')) {
       // Multiline string continuation
@@ -133,7 +163,9 @@ function parseFrontmatter(content: string): {
   }
 
   // Save last value
-  if (currentKey) {
+  if (inNestedObject && currentKey) {
+    data[currentKey] = nestedObject;
+  } else if (currentKey) {
     data[currentKey] = parseYamlValue(currentValue.trim());
   }
 
@@ -219,7 +251,7 @@ export function validateSkillName(name: string): void {
  *
  * Specification requirements:
  * - Max 1024 characters
- * - Cannot contain angle brackets
+ * - Angle brackets are allowed per agentskills.io spec
  */
 export function validateSkillDescription(description: string): void {
   if (!description) {
@@ -233,12 +265,7 @@ export function validateSkillDescription(description: string): void {
     );
   }
 
-  if (/<|>/.test(description)) {
-    throw new SkillValidationError(
-      'Skill description cannot contain angle brackets',
-      'description',
-    );
-  }
+  // Note: angle brackets are allowed per agentskills.io spec
 }
 
 /**
@@ -285,6 +312,7 @@ export function parseSkillMd(
     return {
       name,
       description,
+      version: data.version ? String(data.version) : undefined,
       license: data.license ? String(data.license) : undefined,
       compatibility: data.compatibility ? String(data.compatibility) : undefined,
       metadata: data.metadata as Record<string, unknown> | undefined,
