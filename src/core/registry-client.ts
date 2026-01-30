@@ -27,12 +27,8 @@ export interface LoginRequest {
 export interface LoginResponse {
   success: boolean;
   error?: string;
-  publisher?: {
+  user?: {
     id: string;
-    handle: string;
-    email: string;
-    email_verified: boolean;
-    created_at: string;
   };
   token?: {
     id: string;
@@ -68,12 +64,8 @@ export interface PublishResponse {
 export interface WhoamiResponse {
   success: boolean;
   error?: string;
-  publisher?: {
+  user?: {
     id: string;
-    handle: string;
-    email: string;
-    email_verified: boolean;
-    created_at: string;
   };
 }
 
@@ -131,7 +123,7 @@ export class RegistryClient {
       body: JSON.stringify(request),
     });
 
-    const data = await response.json() as LoginResponse;
+    const data = (await response.json()) as LoginResponse;
 
     if (!response.ok) {
       throw new RegistryError(
@@ -155,7 +147,7 @@ export class RegistryClient {
       headers: this.getAuthHeaders(),
     });
 
-    const data = await response.json() as WhoamiResponse;
+    const data = (await response.json()) as WhoamiResponse;
 
     if (!response.ok) {
       throw new RegistryError(
@@ -266,7 +258,7 @@ export class RegistryClient {
       body: formData,
     });
 
-    const data = await response.json() as PublishResponse;
+    const data = (await response.json()) as PublishResponse;
 
     if (!response.ok) {
       throw new RegistryError(

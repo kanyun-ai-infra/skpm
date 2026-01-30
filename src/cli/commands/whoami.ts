@@ -41,18 +41,15 @@ async function whoamiAction(options: WhoamiOptions): Promise<void> {
   try {
     const response = await client.whoami();
 
-    if (!response.success || !response.publisher) {
+    if (!response.success || !response.user) {
       logger.error('Failed to get user info');
       process.exit(1);
     }
 
-    const { publisher } = response;
+    const { user } = response;
 
-    logger.log(`@${publisher.handle}`);
-    logger.log(`  Email: ${publisher.email}`);
-    logger.log(`  Verified: ${publisher.email_verified ? 'Yes' : 'No'}`);
+    logger.log(`Logged in as: ${user.id}`);
     logger.log(`  Registry: ${registry}`);
-
   } catch (error) {
     if (error instanceof RegistryError) {
       if (error.statusCode === 401) {
@@ -75,7 +72,10 @@ async function whoamiAction(options: WhoamiOptions): Promise<void> {
 
 export const whoamiCommand = new Command('whoami')
   .description('Show current authenticated user')
-  .option('-r, --registry <url>', 'Registry URL (or set RESKILL_REGISTRY env var, or defaults.publishRegistry in skills.json)')
+  .option(
+    '-r, --registry <url>',
+    'Registry URL (or set RESKILL_REGISTRY env var, or defaults.publishRegistry in skills.json)',
+  )
   .action(whoamiAction);
 
 export default whoamiCommand;

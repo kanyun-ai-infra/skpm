@@ -90,11 +90,7 @@ async function loginAction(options: LoginOptions): Promise<void> {
   // Check if already logged in
   const existingToken = authManager.getToken(registry);
   if (existingToken) {
-    const existingEmail = authManager.getEmail(registry);
     logger.log(`Already logged in to ${registry}`);
-    if (existingEmail) {
-      logger.log(`  Email: ${existingEmail}`);
-    }
     logger.newline();
 
     const overwrite = await prompt('Do you want to login with a different account? (y/N) ');
@@ -129,22 +125,20 @@ async function loginAction(options: LoginOptions): Promise<void> {
   try {
     const response = await client.login({ email: email.trim(), password });
 
-    if (!response.success || !response.token || !response.publisher) {
+    if (!response.success || !response.token || !response.user) {
       logger.error(response.error || 'Login failed');
       process.exit(1);
     }
 
-    // Save token with handle
-    authManager.setToken(response.token.secret, registry, response.publisher.email, response.publisher.handle);
+    // Save token
+    authManager.setToken(response.token.secret, registry);
 
     logger.log('✓ Logged in successfully!');
     logger.newline();
-    logger.log(`  Handle: @${response.publisher.handle}`);
-    logger.log(`  Email: ${response.publisher.email}`);
+    logger.log(`  User: ${response.user.id}`);
     logger.log(`  Registry: ${registry}`);
     logger.newline();
     logger.log(`Token saved to ${authManager.getConfigPath()}`);
-
   } catch (error) {
     if (error instanceof RegistryError) {
       logger.error(`Login failed: ${error.message}`);
@@ -161,7 +155,11 @@ async function loginAction(options: LoginOptions): Promise<void> {
 /**
  * Login with a pre-generated token (e.g., from web UI after CAS/OAuth login)
  */
-async function loginWithToken(token: string, registry: string, authManager: AuthManager): Promise<void> {
+async function loginWithToken(
+  token: string,
+  registry: string,
+  authManager: AuthManager,
+): Promise<void> {
   logger.log(`Verifying token with ${registry}...`);
   logger.newline();
 
@@ -171,22 +169,20 @@ async function loginWithToken(token: string, registry: string, authManager: Auth
   try {
     const response = await client.whoami();
 
-    if (!response.success || !response.publisher) {
+    if (!response.success || !response.user) {
       logger.error(response.error || 'Token verification failed');
       process.exit(1);
     }
 
-    // Save token with handle
-    authManager.setToken(token, registry, response.publisher.email, response.publisher.handle);
+    // Save token
+    authManager.setToken(token, registry);
 
     logger.log('✓ Token verified and saved!');
     logger.newline();
-    logger.log(`  Handle: @${response.publisher.handle}`);
-    logger.log(`  Email: ${response.publisher.email}`);
+    logger.log(`  User: ${response.user.id}`);
     logger.log(`  Registry: ${registry}`);
     logger.newline();
     logger.log(`Token saved to ${authManager.getConfigPath()}`);
-
   } catch (error) {
     if (error instanceof RegistryError) {
       logger.error(`Token verification failed: ${error.message}`);
@@ -206,7 +202,10 @@ async function loginWithToken(token: string, registry: string, authManager: Auth
 
 export const loginCommand = new Command('login')
   .description('Authenticate with a reskill registry')
-  .option('-r, --registry <url>', 'Registry URL (or set RESKILL_REGISTRY env var, or defaults.publishRegistry in skills.json)')
+  .option(
+    '-r, --registry <url>',
+    'Registry URL (or set RESKILL_REGISTRY env var, or defaults.publishRegistry in skills.json)',
+  )
   .option('-t, --token <token>', 'Use a pre-generated token (from web UI after CAS/OAuth login)')
   .action(loginAction);
 

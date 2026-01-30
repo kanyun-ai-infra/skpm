@@ -235,7 +235,6 @@ describe('AuthManager', () => {
         registries: {
           'https://existing.registry.com': {
             token: 'existing_token',
-            email: 'user@example.com',
           },
         },
       });
@@ -263,17 +262,6 @@ describe('AuthManager', () => {
 
       const config = readReskillrc() as { registries: Record<string, { token: string }> };
       expect(config.registries[testRegistry].token).toBe('new_token');
-    });
-
-    it('should save email if provided', () => {
-      const testRegistry = 'https://test.registry.com';
-      const manager = new AuthManager();
-      manager.setToken('token', testRegistry, 'user@example.com');
-
-      const config = readReskillrc() as {
-        registries: Record<string, { token: string; email?: string }>;
-      };
-      expect(config.registries[testRegistry].email).toBe('user@example.com');
     });
   });
 
@@ -422,59 +410,6 @@ describe('AuthManager', () => {
     it('should return path to ~/.reskillrc', () => {
       const manager = new AuthManager();
       expect(manager.getConfigPath()).toBe(path.join(tempDir, '.reskillrc'));
-    });
-  });
-
-  // ============================================================================
-  // getEmail tests
-  // ============================================================================
-
-  describe('getEmail', () => {
-    it('should return email from config for specific registry', () => {
-      const testRegistry = 'https://test.registry.com';
-      createReskillrc({
-        registries: {
-          [testRegistry]: {
-            token: 'token',
-            email: 'user@example.com',
-          },
-        },
-      });
-
-      const manager = new AuthManager();
-      expect(manager.getEmail(testRegistry)).toBe('user@example.com');
-    });
-
-    it('should return undefined when no email', () => {
-      const testRegistry = 'https://test.registry.com';
-      createReskillrc({
-        registries: {
-          [testRegistry]: {
-            token: 'token',
-          },
-        },
-      });
-
-      const manager = new AuthManager();
-      expect(manager.getEmail(testRegistry)).toBeUndefined();
-    });
-
-    it('should return email for specific registry from multiple', () => {
-      createReskillrc({
-        registries: {
-          'https://primary.registry.com': {
-            token: 'token1',
-            email: 'primary@example.com',
-          },
-          'https://custom.registry.com': {
-            token: 'token2',
-            email: 'custom@example.com',
-          },
-        },
-      });
-
-      const manager = new AuthManager();
-      expect(manager.getEmail('https://custom.registry.com')).toBe('custom@example.com');
     });
   });
 });

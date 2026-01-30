@@ -14,8 +14,6 @@ import * as path from 'node:path';
 
 export interface RegistryAuth {
   token: string;
-  email?: string;
-  handle?: string;
 }
 
 export interface ReskillConfig {
@@ -93,52 +91,20 @@ export class AuthManager {
   }
 
   /**
-   * Get email for a registry
-   */
-  getEmail(registry?: string): string | undefined {
-    const config = this.readConfig();
-    if (!config?.registries) {
-      return undefined;
-    }
-
-    const targetRegistry = registry || this.getDefaultRegistry();
-    if (!targetRegistry) {
-      return undefined;
-    }
-    const auth = config.registries[targetRegistry];
-    return auth?.email;
-  }
-
-  /**
-   * Get handle for a registry
-   */
-  getHandle(registry?: string): string | undefined {
-    const config = this.readConfig();
-    if (!config?.registries) {
-      return undefined;
-    }
-
-    const targetRegistry = registry || this.getDefaultRegistry();
-    if (!targetRegistry) {
-      return undefined;
-    }
-    const auth = config.registries[targetRegistry];
-    return auth?.handle;
-  }
-
-  /**
    * Set token for a registry
    *
    * Note: When no registry is specified and RESKILL_REGISTRY env var is not set,
    * this method will throw an error. The calling code should ensure a registry
    * is always provided (either explicitly or via environment variable).
    */
-  setToken(token: string, registry?: string, email?: string, handle?: string): void {
+  setToken(token: string, registry?: string): void {
     const config = this.readConfig() || {};
     const targetRegistry = registry || this.getDefaultRegistry();
 
     if (!targetRegistry) {
-      throw new Error('No registry specified. Set RESKILL_REGISTRY environment variable or provide registry explicitly.');
+      throw new Error(
+        'No registry specified. Set RESKILL_REGISTRY environment variable or provide registry explicitly.',
+      );
     }
 
     if (!config.registries) {
@@ -147,8 +113,6 @@ export class AuthManager {
 
     config.registries[targetRegistry] = {
       token,
-      ...(email && { email }),
-      ...(handle && { handle }),
     };
 
     this.writeConfig(config);
