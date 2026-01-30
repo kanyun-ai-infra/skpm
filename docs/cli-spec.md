@@ -461,7 +461,7 @@ reskill pub [path] [options]
 |-------|----------|------------|
 | `name` | Yes | Lowercase letters, numbers, hyphens; 1-64 chars; pattern: `^[a-z0-9][a-z0-9-]*[a-z0-9]$` |
 | `version` | Yes | Semver format: `x.y.z` or `x.y.z-prerelease` |
-| `description` | Yes | 1-1024 chars, no angle brackets |
+| `description` | Yes | 1-1024 chars |
 | `author` | No | String |
 | `license` | No | SPDX identifier (e.g., `MIT`, `Apache-2.0`) |
 | `keywords` | No | Array of strings, max 10 |
