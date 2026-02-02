@@ -28,10 +28,13 @@ npx reskill@latest list
 - **一键安装** — 从任意 Git 仓库一键安装 skill
 - **声明式配置** — `skills.json` + `skills.lock` 确保团队一致性
 - **灵活版本** — 精确版本、semver 范围、分支、commit
-- **多 Registry** — GitHub、GitLab、自建、私有仓库
+- **多源支持** — GitHub、GitLab、自建仓库、HTTP/OSS 归档
 - **多 Agent** — Cursor、Claude Code、Codex、Windsurf、GitHub Copilot 等
+- **Registry 支持** — 发布和共享 skills
 
 ## 安装
+
+**环境要求：** Node.js >= 18.0.0
 
 ```bash
 npm install -g reskill        # 全局安装
@@ -40,17 +43,21 @@ npx reskill@latest <command>  # 或直接使用 npx
 
 ## 命令
 
-| 命令                  | 说明                    |
-| --------------------- | ----------------------- |
-| `init`                | 初始化 `skills.json`    |
-| `install [skills...]` | 安装一个或多个 skills   |
-| `list`               | 列出已安装的 skills  |
-| `info <skill>`       | 查看 skill 详情      |
-| `update [skill]`     | 更新 skills          |
-| `outdated`           | 检查过期的 skills    |
-| `uninstall <skill>`  | 卸载 skill           |
-| `doctor`             | 诊断环境并检查问题   |
-| `completion install` | 安装 Shell Tab 补全  |
+| 命令 | 别名 | 说明 |
+| ---- | ---- | ---- |
+| `init` | - | 初始化 `skills.json` |
+| `install [skills...]` | `i` | 安装一个或多个 skills |
+| `list` | `ls` | 列出已安装的 skills |
+| `info <skill>` | - | 查看 skill 详情 |
+| `update [skill]` | `up` | 更新 skills |
+| `outdated` | - | 检查过期的 skills |
+| `uninstall <skill>` | `un`, `rm`, `remove` | 卸载 skill |
+| `publish [path]` | `pub` | 发布 skill 到 registry |
+| `login` | - | 登录 registry |
+| `logout` | - | 登出 registry |
+| `whoami` | - | 显示当前登录用户 |
+| `doctor` | - | 诊断环境并检查问题 |
+| `completion install` | - | 安装 Shell Tab 补全 |
 
 ### 常用选项
 
@@ -60,17 +67,38 @@ npx reskill@latest <command>  # 或直接使用 npx
 | `-g, --global` | `install`, `uninstall`, `list` | 全局安装/管理技能（用户目录） |
 | `-a, --agent <agents...>` | `install` | 指定目标 Agent（如 `cursor`, `claude-code`） |
 | `--mode <mode>` | `install` | 安装模式：`symlink`（默认）或 `copy` |
+| `--all` | `install` | 安装到所有 Agent |
+| `-y, --yes` | `install`, `uninstall`, `publish` | 跳过确认提示 |
+| `-f, --force` | `install` | 强制重新安装 |
+| `-j, --json` | `list`, `info`, `outdated`, `doctor` | JSON 格式输出 |
 
 运行 `reskill <command> --help` 查看完整选项和详细用法。
 
 ## 源格式
 
 ```bash
-# 基本格式
+# GitHub 简写
 npx reskill@latest install github:user/skill@v1.0.0
+
+# GitLab 简写
 npx reskill@latest install gitlab:group/skill@latest
+
+# 完整 Git URL (HTTPS)
+npx reskill@latest install https://github.com/user/skill.git
+
+# 完整 Git URL (SSH)
+npx reskill@latest install git@github.com:user/skill.git
+
+# GitHub/GitLab 网页 URL（含分支和子路径）
+npx reskill@latest install https://github.com/vercel-labs/agent-skills/tree/main/skills/web-design-guidelines
+
+# 自定义 Registry（自建 GitLab 等）
 npx reskill@latest install gitlab.company.com:team/skill@v1.0.0
-npx reskill@latest install https://github.com/user/repo/tree/main/path
+
+# HTTP/OSS 归档
+npx reskill@latest install https://example.com/skills/my-skill-v1.0.0.tar.gz
+npx reskill@latest install oss://bucket/path/skill.tar.gz
+npx reskill@latest install s3://bucket/path/skill.zip
 
 # 一次安装多个 skills
 npx reskill@latest install github:user/skill1 github:user/skill2@v1.0.0
@@ -95,15 +123,30 @@ npx reskill@latest install https://github.com/org/monorepo/tree/main/skills/plan
 
 **要求**：指定的目录必须包含符合 [Agent Skills 规范](https://agentskills.io) 的有效 `SKILL.md` 文件。
 
+### HTTP/OSS URL 支持
+
+支持从 HTTP/HTTPS URL 直接安装归档文件：
+
+| 格式 | 示例 | 说明 |
+| ---- | ---- | ---- |
+| HTTPS URL | `https://example.com/skill.tar.gz` | 直接下载链接 |
+| 阿里云 OSS | `https://bucket.oss-cn-hangzhou.aliyuncs.com/skill.tar.gz` | 阿里云 OSS URL |
+| AWS S3 | `https://bucket.s3.amazonaws.com/skill.tar.gz` | AWS S3 URL |
+| OSS 协议 | `oss://bucket/path/skill.tar.gz` | 阿里云 OSS 简写 |
+| S3 协议 | `s3://bucket/path/skill.tar.gz` | AWS S3 简写 |
+
+**支持的归档格式**：`.tar.gz`、`.tgz`、`.zip`、`.tar`
+
 ## 版本规范
 
-| 格式     | 示例              | 说明             |
-| -------- | ----------------- | ---------------- |
-| 精确版本 | `@v1.0.0`         | 锁定到指定 tag   |
-| 最新版本 | `@latest`         | 获取最新 tag     |
-| 范围版本 | `@^2.0.0`         | semver 兼容      |
-| 分支     | `@branch:develop` | 指定分支         |
-| Commit   | `@commit:abc1234` | 指定 commit hash |
+| 格式 | 示例 | 说明 |
+| ---- | ---- | ---- |
+| 精确版本 | `@v1.0.0` | 锁定到指定 tag |
+| 最新版本 | `@latest` | 获取最新 tag |
+| 范围版本 | `@^2.0.0` | semver 兼容 (>=2.0.0 <3.0.0) |
+| 分支 | `@branch:develop` | 指定分支 |
+| Commit | `@commit:abc1234` | 指定 commit hash |
+| (无) | - | 默认分支 (main) |
 
 ## 配置
 
@@ -119,7 +162,9 @@ npx reskill@latest install https://github.com/org/monorepo/tree/main/skills/plan
     "internal": "https://gitlab.company.com"
   },
   "defaults": {
-    "installDir": ".skills"
+    "installDir": ".skills",
+    "targetAgents": ["cursor", "claude-code"],
+    "installMode": "symlink"
   }
 }
 ```
@@ -145,12 +190,32 @@ Skills 默认安装到 `.skills/`，可与任何 Agent 集成：
 | Windsurf       | `.windsurf/skills/`                   |
 | GitHub Copilot | `.github/skills/`                     |
 
+## 发布 Skills
+
+将你的 skills 发布到 registry 供他人使用：
+
+```bash
+# 登录 registry
+reskill login
+
+# 验证但不发布（预览模式）
+reskill publish --dry-run
+
+# 发布 skill
+reskill publish
+```
+
+详细的发布指南请参考 [CLI 规范](./docs/cli-spec.md#publish)。
+
 ## 环境变量
 
-| 变量                | 说明         | 默认值             |
-| ------------------- | ------------ | ------------------ |
+| 变量 | 说明 | 默认值 |
+| ---- | ---- | ------ |
 | `RESKILL_CACHE_DIR` | 全局缓存目录 | `~/.reskill-cache` |
-| `DEBUG`             | 启用调试日志 | -                  |
+| `RESKILL_TOKEN` | 认证令牌（优先于 ~/.reskillrc） | - |
+| `RESKILL_REGISTRY` | 默认 registry URL | `https://registry.reskill.dev` |
+| `DEBUG` | 启用调试日志 | - |
+| `NO_COLOR` | 禁用彩色输出 | - |
 
 ## 开发
 
@@ -166,6 +231,9 @@ pnpm build
 
 # 运行测试
 pnpm test
+
+# 运行集成测试
+pnpm test:integration
 
 # 类型检查
 pnpm typecheck
