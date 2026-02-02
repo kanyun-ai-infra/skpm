@@ -12,11 +12,12 @@ import {
   remove,
 } from '../utils/fs.js';
 import { logger } from '../utils/logger.js';
+import { getRegistryUrl, parseSkillIdentifier } from '../utils/registry-scope.js';
 import {
+  type AgentType,
   agents,
   detectInstalledAgents,
   isValidAgentType,
-  type AgentType,
 } from './agent-registry.js';
 import { CacheManager } from './cache-manager.js';
 import { ConfigLoader } from './config-loader.js';
@@ -24,9 +25,8 @@ import { GitResolver } from './git-resolver.js';
 import { HttpResolver } from './http-resolver.js';
 import { Installer, type InstallMode, type InstallResult } from './installer.js';
 import { LockManager } from './lock-manager.js';
-import { RegistryClient } from './registry-client.js';
+import { RegistryClient, RegistryError } from './registry-client.js';
 import { RegistryResolver } from './registry-resolver.js';
-import { getRegistryUrl, parseSkillIdentifier } from '../utils/registry-scope.js';
 
 /**
  * SkillManager configuration options
@@ -962,9 +962,13 @@ export class SkillManager {
     let skillInfo: SkillInfo;
     try {
       skillInfo = await client.getSkillInfo(parsed.fullName);
-    } catch {
-      // skill 不存在，继续走 resolve 流程（会报 404）
-      skillInfo = { name: parsed.fullName };
+    } catch (error) {
+      // Only handle 404 (skill not found) - re-throw other errors (network, server, parsing)
+      if (error instanceof RegistryError && error.statusCode === 404) {
+        skillInfo = { name: parsed.fullName };
+      } else {
+        throw error;
+      }
     }
 
     // 新增：根据 source_type 分支
@@ -976,7 +980,13 @@ export class SkillManager {
     // 1. Resolve registry skill（现有流程）
     logger.package(`Resolving ${ref} from registry...`);
     const resolved = await this.registryResolver.resolve(ref);
-    const { shortName, version, registryUrl: resolvedRegistryUrl, tarball, parsed: resolvedParsed } = resolved;
+    const {
+      shortName,
+      version,
+      registryUrl: resolvedRegistryUrl,
+      tarball,
+      parsed: resolvedParsed,
+    } = resolved;
 
     // 2. Check if already installed (skip if --force)
     const skillPath = this.getSkillPath(shortName);
@@ -991,7 +1001,12 @@ export class SkillManager {
         if (installed) {
           return {
             skill: installed,
-            results: new Map(targetAgents.map((a) => [a, { success: true, path: skillPath, mode: mode as InstallMode }])),
+            results: new Map(
+              targetAgents.map((a) => [
+                a,
+                { success: true, path: skillPath, mode: mode as InstallMode },
+              ]),
+            ),
           };
         }
       }
@@ -1002,7 +1017,12 @@ export class SkillManager {
       if (installed) {
         return {
           skill: installed,
-          results: new Map(targetAgents.map((a) => [a, { success: true, path: skillPath, mode: mode as InstallMode }])),
+          results: new Map(
+            targetAgents.map((a) => [
+              a,
+              { success: true, path: skillPath, mode: mode as InstallMode },
+            ]),
+          ),
         };
       }
     }
@@ -1100,8 +1120,8 @@ export class SkillManager {
     if (parsed.version && parsed.version !== 'latest') {
       throw new Error(
         `Version specifier not supported for web-published skills.\n` +
-        `'${parsed.fullName}' was published via web and does not support versioning.\n` +
-        `Use: reskill install ${parsed.fullName}`
+          `'${parsed.fullName}' was published via web and does not support versioning.\n` +
+          `Use: reskill install ${parsed.fullName}`,
       );
     }
 
@@ -1138,7 +1158,7 @@ export class SkillManager {
    * 通过 Registry 的 /api/skills/:name/download API 下载 tarball
    */
   private async installFromRegistryLocal(
-    _skillInfo: SkillInfo,  // 保留参数以便未来扩展（如日志记录）
+    _skillInfo: SkillInfo, // 保留参数以便未来扩展（如日志记录）
     parsed: ReturnType<typeof parseSkillIdentifier>,
     targetAgents: AgentType[],
     options: InstallOptions = {},
@@ -1149,7 +1169,9 @@ export class SkillManager {
     const registryUrl = getRegistryUrl(parsed.scope);
 
     // 构造下载 URL（通过 Registry API）
-    const downloadUrl = `${registryUrl}api/skills/${encodeURIComponent(parsed.fullName)}/download`;
+    // Ensure trailing slash for proper URL concatenation (defensive coding)
+    const baseUrl = registryUrl.endsWith('/') ? registryUrl : `${registryUrl}/`;
+    const downloadUrl = `${baseUrl}api/skills/${encodeURIComponent(parsed.fullName)}/download`;
 
     logger.debug(`Downloading from: ${downloadUrl}`);
 
