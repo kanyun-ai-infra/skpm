@@ -56,11 +56,17 @@ export class CacheManager {
    *
    * For different reference formats, cache paths are:
    * - github:user/repo@v1.0.0 -> ~/.reskill-cache/github/user/repo/v1.0.0
+   * - github:org/monorepo/skills/pdf@v1.0.0 -> ~/.reskill-cache/github/org/monorepo/skills/pdf/v1.0.0
    * - git@github.com:user/repo.git@v1.0.0 -> ~/.reskill-cache/github.com/user/repo/v1.0.0
    * - https://gitlab.company.com/team/skill.git@v2.0.0 -> ~/.reskill-cache/gitlab.company.com/team/skill/v2.0.0
    */
   getSkillCachePath(parsed: ParsedSkillRef, version: string): string {
-    return path.join(this.cacheDir, parsed.registry, parsed.owner, parsed.repo, version);
+    const basePath = path.join(this.cacheDir, parsed.registry, parsed.owner, parsed.repo);
+    // Include subPath in cache path to differentiate skills in monorepos
+    if (parsed.subPath) {
+      return path.join(basePath, parsed.subPath, version);
+    }
+    return path.join(basePath, version);
   }
 
   /**

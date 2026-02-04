@@ -50,6 +50,44 @@ describe('CacheManager', () => {
         path.join(tempDir, 'gitlab.company.com', 'team', 'my-skill', 'v2.0.0'),
       );
     });
+
+    it('should include subPath in cache path for monorepo skills', () => {
+      const parsedWithSubpath: ParsedSkillRef = {
+        registry: 'github',
+        owner: 'antfu',
+        repo: 'skills',
+        subPath: 'skills/unocss',
+        raw: 'github:antfu/skills/skills/unocss@v1.0.0',
+      };
+      const cachePath = cacheManager.getSkillCachePath(parsedWithSubpath, 'v1.0.0');
+      expect(cachePath).toBe(
+        path.join(tempDir, 'github', 'antfu', 'skills', 'skills', 'unocss', 'v1.0.0'),
+      );
+    });
+
+    it('should differentiate cache paths for different skills in same monorepo', () => {
+      const parsedUnocss: ParsedSkillRef = {
+        registry: 'github',
+        owner: 'antfu',
+        repo: 'skills',
+        subPath: 'skills/unocss',
+        raw: 'github:antfu/skills/skills/unocss@main',
+      };
+      const parsedPnpm: ParsedSkillRef = {
+        registry: 'github',
+        owner: 'antfu',
+        repo: 'skills',
+        subPath: 'skills/pnpm',
+        raw: 'github:antfu/skills/skills/pnpm@main',
+      };
+      const unocssPath = cacheManager.getSkillCachePath(parsedUnocss, 'main');
+      const pnpmPath = cacheManager.getSkillCachePath(parsedPnpm, 'main');
+
+      // Cache paths must be different for different skills
+      expect(unocssPath).not.toBe(pnpmPath);
+      expect(unocssPath).toContain('unocss');
+      expect(pnpmPath).toContain('pnpm');
+    });
   });
 
   describe('isCached', () => {
