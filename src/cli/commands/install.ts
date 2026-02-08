@@ -19,6 +19,10 @@ interface InstallOptions {
   mode?: InstallMode;
   yes?: boolean;
   all?: boolean;
+  /** Select specific skill(s) by name from a multi-skill repo (single ref only) */
+  skill?: string[];
+  /** List available skills in the repo without installing */
+  list?: boolean;
 }
 
 interface InstallContext {
@@ -465,6 +469,77 @@ async function installSingleSkill(
 }
 
 /**
+ * Multi-skill path: list or install selected skills from a single repo (--skill / --list)
+ */
+async function installMultiSkillFromRepo(
+  ref: string,
+  skillNames: string[],
+  listOnly: boolean,
+  ctx: InstallContext,
+  targetAgents: AgentType[],
+  installGlobally: boolean,
+  installMode: InstallMode,
+  spinner: ReturnType<typeof p.spinner>,
+): Promise<void> {
+  const skillManager = new SkillManager(undefined, { global: installGlobally });
+
+  if (listOnly) {
+    spinner.start('Discovering skills...');
+    const result = await skillManager.installSkillsFromRepo(ref, [], [], { listOnly: true });
+    spinner.stop(`Found ${(result as { skills: unknown[] }).skills.length} skill(s)`);
+    if (!('skills' in result) || result.skills.length === 0) {
+      p.outro(chalk.dim('No skills found.'));
+      return;
+    }
+    console.log();
+    p.log.step(chalk.bold('Available skills'));
+    for (const s of result.skills) {
+      p.log.message(`  ${chalk.cyan(s.name)}`);
+      p.log.message(`    ${chalk.dim(s.description)}`);
+    }
+    console.log();
+    p.outro(chalk.dim('Use --skill <name> to install specific skills.'));
+    return;
+  }
+
+  const summaryLines = [
+    chalk.cyan(ref),
+    `  ${chalk.dim('→')} ${formatAgentNames(targetAgents)}`,
+    `  ${chalk.dim('Skills:')} ${chalk.cyan(skillNames.join(', '))}`,
+    `  ${chalk.dim('Scope:')} ${installGlobally ? 'Global' : 'Project'}${chalk.dim(', Mode:')} ${installMode}`,
+  ];
+  p.note(summaryLines.join('\n'), 'Installation Summary');
+
+  if (!ctx.skipConfirm) {
+    const confirmed = await p.confirm({ message: 'Proceed with installation?' });
+    if (p.isCancel(confirmed) || !confirmed) {
+      p.cancel('Installation cancelled');
+      process.exit(0);
+    }
+  }
+
+  spinner.start('Installing skills...');
+  const result = await skillManager.installSkillsFromRepo(ref, skillNames, targetAgents, {
+    save: ctx.options.save !== false && !installGlobally,
+    mode: installMode,
+  });
+
+  spinner.stop('Installation complete');
+
+  if (result.listOnly) return;
+  const installed = result.installed;
+  const resultLines = installed.map(
+    (r) => `  ${chalk.green('✓')} ${r.skill.name}@${r.skill.version}`,
+  );
+  p.note(resultLines.join('\n'), chalk.green(`Installed ${installed.length} skill(s)`));
+
+  if (!installGlobally && installed.length > 0 && ctx.configLoader.exists()) {
+    ctx.configLoader.reload();
+    ctx.configLoader.updateDefaults({ targetAgents, installMode });
+  }
+}
+
+/**
  * Install multiple skills in batch
  */
 async function installMultipleSkills(
@@ -736,6 +811,8 @@ export const installCommand = new Command('install')
   .option('--mode <mode>', 'Installation mode: symlink or copy')
   .option('-y, --yes', 'Skip confirmation prompts')
   .option('--all', 'Install to all agents (implies -y -g)')
+  .option('-s, --skill <names...>', 'Select specific skill(s) by name from a multi-skill repository')
+  .option('--list', 'List available skills in the repository without installing')
   .action(async (skills: string[], options: InstallOptions) => {
     // Handle --all flag implications
     if (options.all) {
@@ -753,24 +830,51 @@ export const installCommand = new Command('install')
     try {
       const spinner = p.spinner();
 
-      // Step 1: Resolve target agents
-      const targetAgents = await resolveTargetAgents(ctx, spinner);
+      // Multi-skill path (single ref + --skill or --list): list only skips scope/mode/agents
+      const isMultiSkillPath =
+        !ctx.isReinstallAll &&
+        ctx.skills.length === 1 &&
+        (ctx.options.list === true || (ctx.options.skill && ctx.options.skill.length > 0));
 
-      // Step 2: Resolve installation scope
-      const installGlobally = await resolveInstallScope(ctx);
+      let targetAgents: AgentType[];
+      let installGlobally: boolean;
+      let installMode: InstallMode;
 
-      // Validate: Cannot install all skills globally
-      if (ctx.isReinstallAll && installGlobally) {
-        p.log.error('Cannot install all skills globally. Please specify a skill to install.');
-        process.exit(1);
+      if (isMultiSkillPath && ctx.options.list === true) {
+        targetAgents = [];
+        installGlobally = false;
+        installMode = 'symlink';
+      } else {
+        // Step 1: Resolve target agents
+        targetAgents = await resolveTargetAgents(ctx, spinner);
+
+        // Step 2: Resolve installation scope
+        installGlobally = await resolveInstallScope(ctx);
+
+        // Validate: Cannot install all skills globally
+        if (ctx.isReinstallAll && installGlobally) {
+          p.log.error('Cannot install all skills globally. Please specify a skill to install.');
+          process.exit(1);
+        }
+
+        // Step 3: Resolve installation mode
+        installMode = await resolveInstallMode(ctx);
       }
-
-      // Step 3: Resolve installation mode
-      const installMode = await resolveInstallMode(ctx);
 
       // Step 4: Execute installation
       if (ctx.isReinstallAll) {
         await installAllSkills(ctx, targetAgents, installMode, spinner);
+      } else if (isMultiSkillPath) {
+        await installMultiSkillFromRepo(
+          ctx.skills[0]!,
+          ctx.options.skill ?? [],
+          ctx.options.list === true,
+          ctx,
+          targetAgents,
+          installGlobally,
+          installMode,
+          spinner,
+        );
       } else if (ctx.isBatchInstall) {
         await installMultipleSkills(ctx, targetAgents, installGlobally, installMode, spinner);
       } else {

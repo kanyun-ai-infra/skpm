@@ -26,7 +26,12 @@ import { Installer, type InstallMode, type InstallResult } from './installer.js'
 import { LockManager } from './lock-manager.js';
 import { RegistryClient, RegistryError } from './registry-client.js';
 import { RegistryResolver } from './registry-resolver.js';
-import { parseSkillFromDir } from './skill-parser.js';
+import {
+  discoverSkillsInDir,
+  filterSkillsByName,
+  parseSkillFromDir,
+  type ParsedSkillWithPath,
+} from './skill-parser.js';
 
 /**
  * SkillManager configuration options
@@ -726,6 +731,121 @@ export class SkillManager {
       return this.installToAgentsFromHttp(ref, targetAgents, options);
     }
     return this.installToAgentsFromGit(ref, targetAgents, options);
+  }
+
+  /**
+   * Multi-skill install: discover skills in a Git repo and install selected ones (or list only).
+   * Only Git references are supported (including https://github.com/...); registry refs are not.
+   *
+   * @param ref - Git skill reference (e.g. github:user/repo@v1.0.0 or https://github.com/user/repo); any #fragment is stripped for resolution
+   * @param skillNames - If non-empty, install only these skills (by SKILL.md name). If empty and !listOnly, install all.
+   * @param targetAgents - Target agents
+   * @param options - Install options; listOnly: true means discover and return skills without installing
+   */
+  async installSkillsFromRepo(
+    ref: string,
+    skillNames: string[],
+    targetAgents: AgentType[],
+    options: InstallOptions & { listOnly?: boolean } = {},
+  ): Promise<
+    | { listOnly: true; skills: ParsedSkillWithPath[] }
+    | { listOnly: false; installed: Array<{ skill: InstalledSkill; results: Map<AgentType, InstallResult> }> }
+  > {
+    const { listOnly = false, save = true, mode = 'symlink' } = options;
+
+    if (this.isRegistrySource(ref)) {
+      throw new Error(
+        'Multi-skill install (--skill / --list) is only supported for Git repository references (e.g. github:user/repo or https://github.com/user/repo).',
+      );
+    }
+
+    const refForResolve = ref.replace(/#.*$/, '').trim();
+    const resolved = await this.resolver.resolve(refForResolve);
+    const { parsed, repoUrl } = resolved;
+    const gitRef = resolved.ref;
+
+    let cacheResult = await this.cache.get(parsed, gitRef);
+    if (!cacheResult) {
+      logger.debug(`Caching from ${repoUrl}@${gitRef}`);
+      cacheResult = await this.cache.cache(repoUrl, parsed, gitRef, gitRef);
+    }
+
+    const cachePath = this.cache.getCachePath(parsed, gitRef);
+    const discovered = discoverSkillsInDir(cachePath);
+
+    if (discovered.length === 0) {
+      throw new Error(
+        'No valid skills found. Skills require a SKILL.md with name and description.',
+      );
+    }
+
+    if (listOnly) {
+      return { listOnly: true, skills: discovered };
+    }
+
+    const selected =
+      skillNames.length > 0 ? filterSkillsByName(discovered, skillNames) : discovered;
+
+    if (skillNames.length > 0 && selected.length === 0) {
+      const available = discovered.map((s) => s.name).join(', ');
+      throw new Error(
+        `No matching skills found for: ${skillNames.join(', ')}. Available skills: ${available}`,
+      );
+    }
+
+    const baseRefForSave = this.config.normalizeSkillRef(refForResolve);
+    const defaults = this.config.getDefaults();
+    const installer = new Installer({
+      cwd: this.projectRoot,
+      global: this.isGlobal,
+      installDir: defaults.installDir,
+    });
+
+    const installed: Array<{ skill: InstalledSkill; results: Map<AgentType, InstallResult> }> = [];
+
+    for (const skillInfo of selected) {
+      const semanticVersion = skillInfo.version ?? gitRef;
+      logger.package(
+        `Installing ${skillInfo.name}@${gitRef} to ${targetAgents.length} agent(s)...`,
+      );
+
+      const results = await installer.installToAgents(
+        skillInfo.dirPath,
+        skillInfo.name,
+        targetAgents,
+        { mode: mode as InstallMode },
+      );
+
+      if (!this.isGlobal) {
+        this.lockManager.lockSkill(skillInfo.name, {
+          source: `${parsed.registry}:${parsed.owner}/${parsed.repo}${parsed.subPath ? `/${parsed.subPath}` : ''}`,
+          version: semanticVersion,
+          ref: gitRef,
+          resolved: repoUrl,
+          commit: cacheResult.commit,
+        });
+      }
+
+      if (!this.isGlobal && save) {
+        this.config.ensureExists();
+        this.config.addSkill(skillInfo.name, `${baseRefForSave}#${skillInfo.name}`);
+      }
+
+      const successCount = Array.from(results.values()).filter((r) => r.success).length;
+      logger.success(`Installed ${skillInfo.name}@${semanticVersion} to ${successCount} agent(s)`);
+
+      installed.push({
+        skill: {
+          name: skillInfo.name,
+          path: skillInfo.dirPath,
+          version: semanticVersion,
+          source: `${parsed.registry}:${parsed.owner}/${parsed.repo}`,
+        },
+        results,
+      });
+    }
+
+    return { listOnly: false, installed };
   }
 
   /**

@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -447,6 +448,131 @@ description: Test skill
 
       const installed = await skillManager.installAll();
       expect(installed).toEqual([]);
+    });
+  });
+
+  describe('installSkillsFromRepo', () => {
+    let repoDir: string;
+
+    function createLocalMultiSkillRepo(
+      skills: Array<{ name: string; description: string }>,
+    ): string {
+      const repoPath = path.join(repoDir, 'skills-repo');
+      fs.mkdirSync(repoPath, { recursive: true });
+      const skillsDir = path.join(repoPath, 'skills');
+      fs.mkdirSync(skillsDir, { recursive: true });
+
+      for (const s of skills) {
+        const skillDir = path.join(skillsDir, s.name);
+        fs.mkdirSync(skillDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(skillDir, 'SKILL.md'),
+          `---
+name: ${s.name}
+description: ${s.description}
+---
+# ${s.name}
+`,
+        );
+      }
+
+      execSync('git init -b main', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git add -A', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: repoPath, stdio: 'pipe' });
+
+      return `file://${repoPath}`;
+    }
+
+    beforeEach(() => {
+      repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reskill-multi-skill-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(repoDir, { recursive: true, force: true });
+    });
+
+    it('should reject HTTP and registry refs', async () => {
+      await expect(
+        skillManager.installSkillsFromRepo('https://example.com/skill.tar.gz', [], ['cursor'], {}),
+      ).rejects.toThrow(/only supported for Git/);
+
+      await expect(
+        skillManager.installSkillsFromRepo('@scope/skill@1.0.0', [], ['cursor'], {}),
+      ).rejects.toThrow(/only supported for Git/);
+    });
+
+    it('should return discovered skills when listOnly is true', async () => {
+      const fileUrl = createLocalMultiSkillRepo([
+        { name: 'pdf', description: 'PDF skill' },
+        { name: 'commit', description: 'Commit skill' },
+      ]);
+
+      const result = await skillManager.installSkillsFromRepo(
+        fileUrl,
+        [],
+        ['cursor'],
+        { listOnly: true },
+      );
+
+      expect(result.listOnly).toBe(true);
+      expect('skills' in result && result.skills).toHaveLength(2);
+      const names = (result as { skills: Array<{ name: string }> }).skills.map((s) => s.name).sort();
+      expect(names).toEqual(['commit', 'pdf']);
+    });
+
+    it('should install selected skills and save ref#name to skills.json', async () => {
+      const fileUrl = createLocalMultiSkillRepo([
+        { name: 'pdf', description: 'PDF skill' },
+        { name: 'commit', description: 'Commit skill' },
+      ]);
+
+      const result = await skillManager.installSkillsFromRepo(
+        fileUrl,
+        ['pdf'],
+        ['cursor'],
+        { save: true },
+      );
+
+      expect(result.listOnly).toBe(false);
+      expect('installed' in result && result.installed).toHaveLength(1);
+      expect(result.installed[0].skill.name).toBe('pdf');
+
+      const canonicalPath = path.join(tempDir, '.agents', 'skills', 'pdf');
+      expect(fs.existsSync(canonicalPath)).toBe(true);
+      expect(fs.existsSync(path.join(canonicalPath, 'SKILL.md'))).toBe(true);
+
+      const config = JSON.parse(fs.readFileSync(path.join(tempDir, 'skills.json'), 'utf-8'));
+      expect(config.skills.pdf).toMatch(/#pdf$/);
+    });
+
+    it('should throw when no skills match and list available', async () => {
+      const fileUrl = createLocalMultiSkillRepo([
+        { name: 'pdf', description: 'PDF skill' },
+      ]);
+
+      await expect(
+        skillManager.installSkillsFromRepo(fileUrl, ['nonexistent'], ['cursor'], {}),
+      ).rejects.toThrow(/No matching skills found/);
+      await expect(
+        skillManager.installSkillsFromRepo(fileUrl, ['nonexistent'], ['cursor'], {}),
+      ).rejects.toThrow(/Available skills/);
+    });
+
+    it('should throw when repo has no valid SKILL.md', async () => {
+      const repoPath = path.join(repoDir, 'empty-repo');
+      fs.mkdirSync(repoPath, { recursive: true });
+      fs.writeFileSync(path.join(repoPath, 'README.md'), '# No skills');
+      execSync('git init -b main', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git add -A', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: repoPath, stdio: 'pipe' });
+
+      await expect(
+        skillManager.installSkillsFromRepo(`file://${repoPath}`, [], ['cursor'], {}),
+      ).rejects.toThrow(/No valid skills found/);
     });
   });
 });
