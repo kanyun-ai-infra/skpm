@@ -751,7 +751,7 @@ export class SkillManager {
     | { listOnly: true; skills: ParsedSkillWithPath[] }
     | { listOnly: false; installed: Array<{ skill: InstalledSkill; results: Map<AgentType, InstallResult> }> }
   > {
-    const { listOnly = false, save = true, mode = 'symlink' } = options;
+    const { listOnly = false, force = false, save = true, mode = 'symlink' } = options;
 
     if (this.isRegistrySource(ref) || this.isHttpSource(ref)) {
       throw new Error(
@@ -808,6 +808,24 @@ export class SkillManager {
 
     for (const skillInfo of selected) {
       const semanticVersion = skillInfo.version ?? gitRef;
+
+      // Skip already-installed skills unless --force is set
+      if (!force) {
+        const existingSkill = this.getInstalledSkill(skillInfo.name);
+        if (existingSkill) {
+          const locked = this.lockManager.get(skillInfo.name);
+          const lockedRef = locked?.ref || locked?.version;
+          if (lockedRef === gitRef) {
+            logger.info(`${skillInfo.name}@${gitRef} is already installed, skipping`);
+            continue;
+          }
+          logger.warn(
+            `${skillInfo.name} is already installed. Use --force to reinstall.`,
+          );
+          continue;
+        }
+      }
+
       logger.package(
         `Installing ${skillInfo.name}@${gitRef} to ${targetAgents.length} agent(s)...`,
       );
