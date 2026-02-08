@@ -751,7 +751,11 @@ export class SkillManager {
     | { listOnly: true; skills: ParsedSkillWithPath[] }
     | {
         listOnly: false;
-        installed: Array<{ skill: InstalledSkill; results: Map<AgentType, InstallResult> }>;
+        installed: Array<{
+          skill: InstalledSkill;
+          results: Map<AgentType, InstallResult>;
+        }>;
+        skipped: Array<{ name: string; reason: string }>;
       }
   > {
     const { listOnly = false, force = false, save = true, mode = 'symlink' } = options;
@@ -807,7 +811,11 @@ export class SkillManager {
       installDir: customInstallDir,
     });
 
-    const installed: Array<{ skill: InstalledSkill; results: Map<AgentType, InstallResult> }> = [];
+    const installed: Array<{
+      skill: InstalledSkill;
+      results: Map<AgentType, InstallResult>;
+    }> = [];
+    const skipped: Array<{ name: string; reason: string }> = [];
 
     for (const skillInfo of selected) {
       const semanticVersion = skillInfo.version ?? gitRef;
@@ -819,11 +827,13 @@ export class SkillManager {
           const locked = this.lockManager.get(skillInfo.name);
           const lockedRef = locked?.ref || locked?.version;
           if (lockedRef === gitRef) {
+            const reason = `already installed at ${gitRef}`;
             logger.info(`${skillInfo.name}@${gitRef} is already installed, skipping`);
+            skipped.push({ name: skillInfo.name, reason });
             continue;
           }
-          logger.warn(`${skillInfo.name} is already installed. Use --force to reinstall.`);
-          continue;
+          // Different version installed — allow upgrade without --force
+          // Only skip when the exact same ref is already locked
         }
       }
 
@@ -831,6 +841,8 @@ export class SkillManager {
         `Installing ${skillInfo.name}@${gitRef} to ${targetAgents.length} agent(s)...`,
       );
 
+      // Note: force is handled at the SkillManager level (skip-if-installed check above).
+      // The Installer always overwrites (remove + copy), so no force flag is needed there.
       const results = await installer.installToAgents(
         skillInfo.dirPath,
         skillInfo.name,
@@ -867,7 +879,7 @@ export class SkillManager {
       });
     }
 
-    return { listOnly: false, installed };
+    return { listOnly: false, installed, skipped };
   }
 
   /**

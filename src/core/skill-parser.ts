@@ -488,9 +488,13 @@ export function discoverSkillsInDir(basePath: string): ParsedSkillWithPath[] {
       const entries = fs.readdirSync(dir);
       for (const entry of entries) {
         const skillDir = path.join(dir, entry);
-        if (fs.statSync(skillDir).isDirectory() && hasValidSkillMd(skillDir)) {
-          addSkill(skillDir);
-          visitedDirs.add(path.resolve(skillDir));
+        try {
+          if (fs.statSync(skillDir).isDirectory() && hasValidSkillMd(skillDir)) {
+            addSkill(skillDir);
+            visitedDirs.add(path.resolve(skillDir));
+          }
+        } catch {
+          // Skip entries that can't be stat'd (race condition, permission, etc.)
         }
       }
     } catch {

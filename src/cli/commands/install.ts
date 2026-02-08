@@ -529,10 +529,25 @@ async function installMultiSkillFromRepo(
   spinner.stop('Installation complete');
 
   if (result.listOnly) return; // Type narrowing for discriminated union
-  const { installed } = result;
+  const { installed, skipped } = result;
+
+  if (installed.length === 0 && skipped.length > 0) {
+    const skipLines = skipped.map(
+      (s) => `  ${chalk.dim('–')} ${s.name}: ${chalk.dim(s.reason)}`,
+    );
+    p.note(skipLines.join('\n'), chalk.yellow('All skills were already installed'));
+    p.log.info('Use --force to reinstall.');
+    return;
+  }
+
   const resultLines = installed.map(
     (r) => `  ${chalk.green('✓')} ${r.skill.name}@${r.skill.version}`,
   );
+  if (skipped.length > 0) {
+    for (const s of skipped) {
+      resultLines.push(`  ${chalk.dim('–')} ${s.name}: ${chalk.dim(s.reason)}`);
+    }
+  }
   p.note(resultLines.join('\n'), chalk.green(`Installed ${installed.length} skill(s)`));
 
   if (!installGlobally && installed.length > 0 && ctx.configLoader.exists()) {

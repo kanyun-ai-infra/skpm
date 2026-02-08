@@ -100,10 +100,23 @@ describe('CLI Integration: install --skill / --list (multi-skill repo)', () => {
       expect(first.exitCode).toBe(0);
       expect(pathExists(path.join(tempDir, '.cursor', 'skills', 'pdf', 'SKILL.md'))).toBe(true);
 
-      // Second install with --force should succeed
+      // Second install with --force should actually reinstall
       const second = runCli(`install ${repoUrl} --skill pdf -a cursor -y --force`, tempDir);
       expect(second.exitCode).toBe(0);
+      const secondOutput = getOutput(second);
+      expect(secondOutput).toMatch(/Installed|Installing/i);
       expect(pathExists(path.join(tempDir, '.cursor', 'skills', 'pdf', 'SKILL.md'))).toBe(true);
+    });
+
+    it('should skip already-installed skill without --force', () => {
+      // First install
+      runCli(`install ${repoUrl} --skill pdf -a cursor -y`, tempDir);
+
+      // Second install without --force should skip
+      const second = runCli(`install ${repoUrl} --skill pdf -a cursor -y`, tempDir);
+      expect(second.exitCode).toBe(0);
+      const output = getOutput(second);
+      expect(output).toMatch(/already installed|skipping/i);
     });
   });
 
