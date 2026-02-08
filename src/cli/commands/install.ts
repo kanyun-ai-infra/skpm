@@ -23,6 +23,8 @@ interface InstallOptions {
   skill?: string[];
   /** List available skills in the repo without installing */
   list?: boolean;
+  /** Registry URL override for registry-based installs */
+  registry?: string;
 }
 
 interface InstallContext {
@@ -385,6 +387,7 @@ async function installAllSkills(
         force: options.force,
         save: false, // Already in skills.json
         mode: installMode,
+        registry: options.registry,
       });
 
       const successCount = Array.from(results.values()).filter((r) => r.success).length;
@@ -451,6 +454,7 @@ async function installSingleSkill(
     force: options.force,
     save: options.save !== false && !installGlobally,
     mode: installMode,
+    registry: options.registry,
   });
 
   spinner.stop('Installation complete');
@@ -586,6 +590,7 @@ async function installMultipleSkills(
         {
           force: options.force,
           save: options.save !== false && !installGlobally,
+          registry: options.registry,
           mode: installMode,
         },
       );
@@ -813,6 +818,7 @@ export const installCommand = new Command('install')
   .option('--all', 'Install to all agents (implies -y -g)')
   .option('-s, --skill <names...>', 'Select specific skill(s) by name from a multi-skill repository')
   .option('--list', 'List available skills in the repository without installing')
+  .option('-r, --registry <url>', 'Registry URL override for registry-based installs')
   .action(async (skills: string[], options: InstallOptions) => {
     // Handle --all flag implications
     if (options.all) {

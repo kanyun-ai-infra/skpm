@@ -17,12 +17,12 @@ export const PUBLIC_REGISTRY = 'https://reskill.info/';
  */
 const REGISTRY_SCOPE_MAP: Record<string, string> = {
   // rush-app (private registry, new)
-  'https://rush-test.zhenguanyu.com': '@kanyun',
+  'https://rush-test.zhenguanyu.com': '@kanyun-test',
   'https://rush.zhenguanyu.com': '@kanyun',
   // reskill-app (private registry, legacy)
-  'https://reskill-test.zhenguanyu.com': '@kanyun',
+  'https://reskill-test.zhenguanyu.com': '@kanyun-test',
   // Local development
-  'http://localhost:3000': '@kanyun',
+  'http://localhost:3000': '@kanyun-test',
 };
 
 /**

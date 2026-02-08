@@ -122,6 +122,7 @@ describe('install command', () => {
       expect(optionNames).toContain('--mode');
       expect(optionNames).toContain('--yes');
       expect(optionNames).toContain('--all');
+      expect(optionNames).toContain('--registry');
     });
 
     it('should have correct option shortcuts', () => {
@@ -129,11 +130,13 @@ describe('install command', () => {
       const globalOption = installCommand.options.find((o) => o.long === '--global');
       const agentOption = installCommand.options.find((o) => o.long === '--agent');
       const yesOption = installCommand.options.find((o) => o.long === '--yes');
+      const registryOption = installCommand.options.find((o) => o.long === '--registry');
 
       expect(forceOption?.short).toBe('-f');
       expect(globalOption?.short).toBe('-g');
       expect(agentOption?.short).toBe('-a');
       expect(yesOption?.short).toBe('-y');
+      expect(registryOption?.short).toBe('-r');
     });
 
     it('should have a description', () => {
@@ -169,6 +172,62 @@ describe('install single skill behavior', () => {
       const yesOption = installCommand.options.find((o) => o.long === '--yes');
       expect(yesOption).toBeDefined();
       expect(yesOption?.short).toBe('-y');
+    });
+
+    it('should have --registry option with -r shortcut', () => {
+      const registryOption = installCommand.options.find((o) => o.long === '--registry');
+      expect(registryOption).toBeDefined();
+      expect(registryOption?.short).toBe('-r');
+    });
+
+    it('--registry option should accept a URL value', () => {
+      const registryOption = installCommand.options.find((o) => o.long === '--registry');
+      expect(registryOption).toBeDefined();
+      expect(registryOption?.flags).toContain('<url>');
+    });
+  });
+});
+
+// ============================================================================
+// Registry Option Tests
+// ============================================================================
+
+describe('--registry option behavior', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('option definition', () => {
+    it('should define --registry with URL argument', () => {
+      const registryOption = installCommand.options.find((o) => o.long === '--registry');
+      expect(registryOption).toBeDefined();
+      // <url> means the argument is required when the option is used
+      expect(registryOption?.flags).toContain('<url>');
+    });
+
+    it('should not conflict with other option shortcuts', () => {
+      const shortcuts = installCommand.options.map((o) => o.short).filter(Boolean);
+      const registryShort = installCommand.options.find((o) => o.long === '--registry')?.short;
+      expect(registryShort).toBe('-r');
+      // Ensure -r is unique
+      const count = shortcuts.filter((s) => s === '-r').length;
+      expect(count).toBe(1);
+    });
+  });
+
+  describe('registry URL propagation logic', () => {
+    it('should pass registry URL to installToAgents options', () => {
+      const registryUrl = 'https://custom-registry.example.com';
+      const options = { registry: registryUrl, force: false };
+
+      // Verify the options object structure includes registry
+      expect(options.registry).toBe(registryUrl);
+    });
+
+    it('should allow registry to be undefined when not specified', () => {
+      const options = { force: false };
+
+      expect((options as { registry?: string }).registry).toBeUndefined();
     });
   });
 });

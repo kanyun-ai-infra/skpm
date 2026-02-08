@@ -268,6 +268,8 @@ export interface InstallOptions {
   mode?: 'symlink' | 'copy';
   /** Skip confirmation */
   yes?: boolean;
+  /** Registry URL override (for registry-based installs) */
+  registry?: string;
 }
 
 /**

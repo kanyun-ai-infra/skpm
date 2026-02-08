@@ -138,7 +138,7 @@ describe('Install from npm-style Registry', () => {
   describe('getRegistryUrl', () => {
     it('should resolve @kanyun to private registry', () => {
       const registry = getRegistryUrl('@kanyun');
-      expect(registry).toBe('https://rush-test.zhenguanyu.com/');
+      expect(registry).toBe('https://rush.zhenguanyu.com/');
     });
 
     it('should return public registry for null scope', () => {

@@ -18,8 +18,8 @@ import {
 
 describe('registry-scope', () => {
   describe('getScopeForRegistry', () => {
-    it('should return @kanyun for rush-test.zhenguanyu.com', () => {
-      expect(getScopeForRegistry('https://rush-test.zhenguanyu.com')).toBe('@kanyun');
+    it('should return @kanyun-test for rush-test.zhenguanyu.com', () => {
+      expect(getScopeForRegistry('https://rush-test.zhenguanyu.com')).toBe('@kanyun-test');
     });
 
     it('should return @kanyun for rush.zhenguanyu.com', () => {
@@ -27,15 +27,15 @@ describe('registry-scope', () => {
     });
 
     it('should handle trailing slash', () => {
-      expect(getScopeForRegistry('https://rush-test.zhenguanyu.com/')).toBe('@kanyun');
+      expect(getScopeForRegistry('https://rush-test.zhenguanyu.com/')).toBe('@kanyun-test');
     });
 
-    it('should return @kanyun for reskill-test.zhenguanyu.com (legacy)', () => {
-      expect(getScopeForRegistry('https://reskill-test.zhenguanyu.com')).toBe('@kanyun');
+    it('should return @kanyun-test for reskill-test.zhenguanyu.com (legacy)', () => {
+      expect(getScopeForRegistry('https://reskill-test.zhenguanyu.com')).toBe('@kanyun-test');
     });
 
-    it('should return @kanyun for reskill-test.zhenguanyu.com/ with trailing slash', () => {
-      expect(getScopeForRegistry('https://reskill-test.zhenguanyu.com/')).toBe('@kanyun');
+    it('should return @kanyun-test for reskill-test.zhenguanyu.com/ with trailing slash', () => {
+      expect(getScopeForRegistry('https://reskill-test.zhenguanyu.com/')).toBe('@kanyun-test');
     });
 
     it('should return null for unknown registry', () => {
@@ -51,12 +51,12 @@ describe('registry-scope', () => {
     describe('without custom scopeRegistries (backward compatibility)', () => {
       it('should return registry for known scope @kanyun', () => {
         const registry = getRegistryForScope('@kanyun');
-        expect(registry).toBe('https://rush-test.zhenguanyu.com/');
+        expect(registry).toBe('https://rush.zhenguanyu.com/');
       });
 
       it('should handle scope without @ prefix', () => {
         const registry = getRegistryForScope('kanyun');
-        expect(registry).toBe('https://rush-test.zhenguanyu.com/');
+        expect(registry).toBe('https://rush.zhenguanyu.com/');
       });
 
       it('should return null for unknown scope', () => {
@@ -90,7 +90,7 @@ describe('registry-scope', () => {
           '@other': 'https://other.com/',
         };
         const registry = getRegistryForScope('@kanyun', customRegistries);
-        expect(registry).toBe('https://rush-test.zhenguanyu.com/');
+        expect(registry).toBe('https://rush.zhenguanyu.com/');
       });
 
       it('should return null if scope not found in custom or hardcoded', () => {
@@ -134,12 +134,12 @@ describe('registry-scope', () => {
     describe('private registry (with scope) - backward compatibility', () => {
       it('should resolve registry from known scope @kanyun', () => {
         const registry = getRegistryUrl('@kanyun');
-        expect(registry).toBe('https://rush-test.zhenguanyu.com/');
+        expect(registry).toBe('https://rush.zhenguanyu.com/');
       });
 
       it('should handle scope without @ prefix', () => {
         const registry = getRegistryUrl('kanyun');
-        expect(registry).toBe('https://rush-test.zhenguanyu.com/');
+        expect(registry).toBe('https://rush.zhenguanyu.com/');
       });
 
       it('should throw error for unknown scope', () => {
@@ -178,7 +178,7 @@ describe('registry-scope', () => {
           '@other': 'https://other.com/',
         };
         const url = getRegistryUrl('@kanyun', customRegistries);
-        expect(url).toBe('https://rush-test.zhenguanyu.com/');
+        expect(url).toBe('https://rush.zhenguanyu.com/');
       });
 
       it('should throw error for unknown scope not in custom or hardcoded', () => {
