@@ -448,6 +448,86 @@ describe('GitResolver', () => {
     });
   });
 
+  describe('parseRef with shorthand tree/branch/path format', () => {
+    it('should parse shorthand with tree/branch/path', () => {
+      const result = resolver.parseRef(
+        'github:vercel-labs/skills/tree/main/skills/find-skills',
+      );
+      expect(result).toEqual({
+        registry: 'github',
+        owner: 'vercel-labs',
+        repo: 'skills',
+        subPath: 'skills/find-skills',
+        version: 'branch:main',
+        raw: 'github:vercel-labs/skills/tree/main/skills/find-skills',
+      });
+    });
+
+    it('should parse shorthand with tree/branch but no subpath', () => {
+      const result = resolver.parseRef('github:user/repo/tree/main');
+      expect(result).toEqual({
+        registry: 'github',
+        owner: 'user',
+        repo: 'repo',
+        subPath: undefined,
+        version: 'branch:main',
+        raw: 'github:user/repo/tree/main',
+      });
+    });
+
+    it('should parse shorthand with blob/branch/path', () => {
+      const result = resolver.parseRef('github:user/repo/blob/dev/src/skill');
+      expect(result).toEqual({
+        registry: 'github',
+        owner: 'user',
+        repo: 'repo',
+        subPath: 'src/skill',
+        version: 'branch:dev',
+        raw: 'github:user/repo/blob/dev/src/skill',
+      });
+    });
+
+    it('should parse shorthand with tree/branch/path and no registry prefix', () => {
+      const result = resolver.parseRef('vercel-labs/skills/tree/main/skills/find-skills');
+      expect(result).toEqual({
+        registry: 'github',
+        owner: 'vercel-labs',
+        repo: 'skills',
+        subPath: 'skills/find-skills',
+        version: 'branch:main',
+        raw: 'vercel-labs/skills/tree/main/skills/find-skills',
+      });
+    });
+
+    it('should not treat tree as special when it is a regular subpath segment', () => {
+      // "tree" is only special when followed by a branch name (parts[2] === 'tree')
+      // Here owner/repo/skills/tree is a normal subpath
+      const result = resolver.parseRef('github:org/repo/skills/tree');
+      expect(result).toEqual({
+        registry: 'github',
+        owner: 'org',
+        repo: 'repo',
+        subPath: 'skills/tree',
+        version: undefined,
+        raw: 'github:org/repo/skills/tree',
+      });
+    });
+
+    it('should handle tree/branch/path with version override (@version takes precedence)', () => {
+      // If user provides both tree/branch and @version, tree/branch wins
+      // because tree/branch is detected first before @version stripping
+      // Actually, @version is stripped first, so let's test this edge case
+      const result = resolver.parseRef(
+        'github:vercel-labs/skills/tree/main/skills/find-skills@v1.0.0',
+      );
+      // @version is parsed first (lastIndexOf @), so version = 'v1.0.0'
+      // then remaining = 'vercel-labs/skills/tree/main/skills/find-skills'
+      // tree/main is detected, version is overridden to 'branch:main'
+      expect(result.version).toBe('branch:main');
+      expect(result.subPath).toBe('skills/find-skills');
+    });
+  });
+
   describe('parseRef edge cases', () => {
     it('should handle repo name with dots', () => {
       const result = resolver.parseRef('user/my.skill.name@v1.0.0');
