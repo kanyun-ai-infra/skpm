@@ -19,7 +19,7 @@
 
 ```bash
 npx reskill@latest init
-npx reskill@latest install github:anthropics/skills/frontend-design@latest
+npx reskill@latest install github:anthropics/skills/skills/frontend-design@latest
 npx reskill@latest list
 ```
 
@@ -43,36 +43,36 @@ npx reskill@latest <command>  # 或直接使用 npx
 
 ## 命令
 
-| 命令 | 别名 | 说明 |
-| ---- | ---- | ---- |
-| `init` | - | 初始化 `skills.json` |
-| `install [skills...]` | `i` | 安装一个或多个 skills |
-| `list` | `ls` | 列出已安装的 skills |
-| `info <skill>` | - | 查看 skill 详情 |
-| `update [skill]` | `up` | 更新 skills |
-| `outdated` | - | 检查过期的 skills |
-| `uninstall <skill>` | `un`, `rm`, `remove` | 卸载 skill |
-| `publish [path]` | `pub` | 发布 skill 到 registry ¹ |
-| `login` | - | 登录 registry ¹ |
-| `logout` | - | 登出 registry ¹ |
-| `whoami` | - | 显示当前登录用户 ¹ |
-| `doctor` | - | 诊断环境并检查问题 |
+| 命令                  | 别名                 | 说明                     |
+| --------------------- | -------------------- | ------------------------ |
+| `init`                | -                    | 初始化 `skills.json`     |
+| `install [skills...]` | `i`                  | 安装一个或多个 skills    |
+| `list`                | `ls`                 | 列出已安装的 skills      |
+| `info <skill>`        | -                    | 查看 skill 详情          |
+| `update [skill]`      | `up`                 | 更新 skills              |
+| `outdated`            | -                    | 检查过期的 skills        |
+| `uninstall <skill>`   | `un`, `rm`, `remove` | 卸载 skill               |
+| `publish [path]`      | `pub`                | 发布 skill 到 registry ¹ |
+| `login`               | -                    | 登录 registry ¹          |
+| `logout`              | -                    | 登出 registry ¹          |
+| `whoami`              | -                    | 显示当前登录用户 ¹       |
+| `doctor`              | -                    | 诊断环境并检查问题       |
 
 > ¹ Registry 相关命令（`publish`、`login`、`logout`、`whoami`）需要部署私有 registry 后才能使用，暂不对外开放。
 | `completion install` | - | 安装 Shell Tab 补全 |
 
 ### 常用选项
 
-| 选项 | 适用命令 | 说明 |
-| ---- | ------- | ---- |
-| `--no-save` | `install` | 安装时不保存到 `skills.json`（用于个人技能） |
-| `-g, --global` | `install`, `uninstall`, `list` | 全局安装/管理技能（用户目录） |
-| `-a, --agent <agents...>` | `install` | 指定目标 Agent（如 `cursor`, `claude-code`） |
-| `--mode <mode>` | `install` | 安装模式：`symlink`（默认）或 `copy` |
-| `--all` | `install` | 安装到所有 Agent |
-| `-y, --yes` | `install`, `uninstall`, `publish` | 跳过确认提示 |
-| `-f, --force` | `install` | 强制重新安装 |
-| `-j, --json` | `list`, `info`, `outdated`, `doctor` | JSON 格式输出 |
+| 选项                      | 适用命令                             | 说明                                         |
+| ------------------------- | ------------------------------------ | -------------------------------------------- |
+| `--no-save`               | `install`                            | 安装时不保存到 `skills.json`（用于个人技能） |
+| `-g, --global`            | `install`, `uninstall`, `list`       | 全局安装/管理技能（用户目录）                |
+| `-a, --agent <agents...>` | `install`                            | 指定目标 Agent（如 `cursor`, `claude-code`） |
+| `--mode <mode>`           | `install`                            | 安装模式：`symlink`（默认）或 `copy`         |
+| `--all`                   | `install`                            | 安装到所有 Agent                             |
+| `-y, --yes`               | `install`, `uninstall`, `publish`    | 跳过确认提示                                 |
+| `-f, --force`             | `install`                            | 强制重新安装                                 |
+| `-j, --json`              | `list`, `info`, `outdated`, `doctor` | JSON 格式输出                                |
 
 运行 `reskill <command> --help` 查看完整选项和详细用法。
 
@@ -129,26 +129,26 @@ npx reskill@latest install https://github.com/org/monorepo/tree/main/skills/plan
 
 支持从 HTTP/HTTPS URL 直接安装归档文件：
 
-| 格式 | 示例 | 说明 |
-| ---- | ---- | ---- |
-| HTTPS URL | `https://example.com/skill.tar.gz` | 直接下载链接 |
-| 阿里云 OSS | `https://bucket.oss-cn-hangzhou.aliyuncs.com/skill.tar.gz` | 阿里云 OSS URL |
-| AWS S3 | `https://bucket.s3.amazonaws.com/skill.tar.gz` | AWS S3 URL |
-| OSS 协议 | `oss://bucket/path/skill.tar.gz` | 阿里云 OSS 简写 |
-| S3 协议 | `s3://bucket/path/skill.tar.gz` | AWS S3 简写 |
+| 格式       | 示例                                                       | 说明            |
+| ---------- | ---------------------------------------------------------- | --------------- |
+| HTTPS URL  | `https://example.com/skill.tar.gz`                         | 直接下载链接    |
+| 阿里云 OSS | `https://bucket.oss-cn-hangzhou.aliyuncs.com/skill.tar.gz` | 阿里云 OSS URL  |
+| AWS S3     | `https://bucket.s3.amazonaws.com/skill.tar.gz`             | AWS S3 URL      |
+| OSS 协议   | `oss://bucket/path/skill.tar.gz`                           | 阿里云 OSS 简写 |
+| S3 协议    | `s3://bucket/path/skill.tar.gz`                            | AWS S3 简写     |
 
 **支持的归档格式**：`.tar.gz`、`.tgz`、`.zip`、`.tar`
 
 ## 版本规范
 
-| 格式 | 示例 | 说明 |
-| ---- | ---- | ---- |
-| 精确版本 | `@v1.0.0` | 锁定到指定 tag |
-| 最新版本 | `@latest` | 获取最新 tag |
-| 范围版本 | `@^2.0.0` | semver 兼容 (>=2.0.0 <3.0.0) |
-| 分支 | `@branch:develop` | 指定分支 |
-| Commit | `@commit:abc1234` | 指定 commit hash |
-| (无) | - | 默认分支 (main) |
+| 格式     | 示例              | 说明                         |
+| -------- | ----------------- | ---------------------------- |
+| 精确版本 | `@v1.0.0`         | 锁定到指定 tag               |
+| 最新版本 | `@latest`         | 获取最新 tag                 |
+| 范围版本 | `@^2.0.0`         | semver 兼容 (>=2.0.0 <3.0.0) |
+| 分支     | `@branch:develop` | 指定分支                     |
+| Commit   | `@commit:abc1234` | 指定 commit hash             |
+| (无)     | -                 | 默认分支 (main)              |
 
 ## 配置
 
@@ -213,13 +213,13 @@ reskill publish
 
 ## 环境变量
 
-| 变量 | 说明 | 默认值 |
-| ---- | ---- | ------ |
-| `RESKILL_CACHE_DIR` | 全局缓存目录 | `~/.reskill-cache` |
-| `RESKILL_TOKEN` | 认证令牌（优先于 ~/.reskillrc） | - |
-| `RESKILL_REGISTRY` | 默认 registry URL | `https://registry.reskill.dev` |
-| `DEBUG` | 启用调试日志 | - |
-| `NO_COLOR` | 禁用彩色输出 | - |
+| 变量                | 说明                            | 默认值                         |
+| ------------------- | ------------------------------- | ------------------------------ |
+| `RESKILL_CACHE_DIR` | 全局缓存目录                    | `~/.reskill-cache`             |
+| `RESKILL_TOKEN`     | 认证令牌（优先于 ~/.reskillrc） | -                              |
+| `RESKILL_REGISTRY`  | 默认 registry URL               | `https://registry.reskill.dev` |
+| `DEBUG`             | 启用调试日志                    | -                              |
+| `NO_COLOR`          | 禁用彩色输出                    | -                              |
 
 ## 开发
 

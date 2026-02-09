@@ -20,8 +20,6 @@ import type { PublishPayload } from './publisher.js';
 export interface RegistryConfig {
   registry: string;
   token?: string;
-  /** API path prefix, e.g., '/api' (default) or '/api/reskill' for rush-app */
-  apiPrefix?: string;
 }
 
 export interface PublishRequest {
@@ -140,16 +138,17 @@ export class RegistryClient {
   }
 
   /**
-   * Get API base URL (registry + apiPrefix)
+   * Get API base URL (registry + /api)
    *
-   * @returns Base URL for API calls, e.g., 'https://example.com/api' or 'https://rush.com/api/reskill'
+   * All registries use the unified '/api' prefix.
+   *
+   * @returns Base URL for API calls, e.g., 'https://example.com/api'
    */
   private getApiBase(): string {
-    const prefix = this.config.apiPrefix || '/api';
     const registry = this.config.registry.endsWith('/')
       ? this.config.registry.slice(0, -1)
       : this.config.registry;
-    return `${registry}${prefix}`;
+    return `${registry}/api`;
   }
 
   /**
@@ -172,7 +171,7 @@ export class RegistryClient {
    * Get current user info (whoami)
    */
   async whoami(): Promise<WhoamiResponse> {
-    const url = `${this.getApiBase()}/auth/me`;
+    const url = `${this.getApiBase()}/skill-auth/me`;
 
     const response = await fetch(url, {
       method: 'GET',
@@ -195,14 +194,14 @@ export class RegistryClient {
   /**
    * CLI login - verify token and get user info
    *
-   * Calls POST /api/auth/login-cli to validate the token and retrieve user information.
+   * Calls POST /api/skill-auth/login-cli to validate the token and retrieve user information.
    * This is the preferred method for CLI authentication.
    *
    * @returns User information if authentication succeeds
    * @throws RegistryError if authentication fails
    */
   async loginCli(): Promise<LoginCliResponse> {
-    const url = `${this.getApiBase()}/auth/login-cli`;
+    const url = `${this.getApiBase()}/skill-auth/login-cli`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -251,7 +250,7 @@ export class RegistryClient {
           const content = fs.readFileSync(filePath);
           const stat = fs.statSync(filePath);
 
-          // If shortName is provided, use it as top-level directory in tarball path
+          // Prepend shortName as top-level directory if provided
           const entryName = shortName ? `${shortName}/${file}` : file;
 
           tarPack.entry(
@@ -271,16 +270,16 @@ export class RegistryClient {
   }
 
   // ============================================================================
-  // Skill Info Methods (for web-published skill support)
+  // Skill Info Methods (web-published skill support)
   // ============================================================================
 
   /**
-   * Get skill basic info (including source_type).
-   * Used by install command to decide installation logic branch.
+   * Get basic skill info (including source_type).
+   * Used by the install command to determine the installation logic branch.
    *
-   * @param skillName - Full name, e.g. @kanyun/my-skill
-   * @returns Skill basic info
-   * @throws RegistryError if skill not found or request fails
+   * @param skillName - Full skill name, e.g., @kanyun/my-skill
+   * @returns Basic skill information
+   * @throws RegistryError if skill not found or request failed
    */
   async getSkillInfo(skillName: string): Promise<SkillInfo> {
     const url = `${this.getApiBase()}/skills/${encodeURIComponent(skillName)}`;
@@ -293,7 +292,7 @@ export class RegistryClient {
     if (!response.ok) {
       const data = (await response.json()) as { error?: string };
 
-      // Give explicit "skill not found" error for 404
+      // Return a clear "not found" error for 404 responses
       if (response.status === 404) {
         throw new RegistryError(`Skill not found: ${skillName}`, response.status, data);
       }
@@ -381,17 +380,17 @@ export class RegistryClient {
    *
    * @example
    * await client.resolveVersion('@kanyun/test-skill', 'latest') // '2.4.5'
-   * await client.resolveVersion('@kanyun/test-skill', '2.4.5') // '2.4.5' (returns as-is)
+   * await client.resolveVersion('@kanyun/test-skill', '2.4.5') // '2.4.5' (returned as-is)
    */
   async resolveVersion(skillName: string, tagOrVersion?: string): Promise<string> {
     const version = tagOrVersion || 'latest';
 
-    // If it's a semver version, return as-is
+    // If it's already a semver version number, return as-is
     if (/^\d+\.\d+\.\d+/.test(version)) {
       return version;
     }
 
-    // Otherwise treat as tag and query dist-tags
+    // Otherwise treat it as a tag and query dist-tags
     const url = `${this.getApiBase()}/skills/${encodeURIComponent(skillName)}`;
 
     const response = await fetch(url, {
@@ -414,7 +413,7 @@ export class RegistryClient {
       data?: {
         dist_tags?: Array<{ tag: string; version: string }>;
       };
-      // Compatible with npm-style dist-tags
+      // Also support npm-style dist-tags for compatibility
       'dist-tags'?: Record<string, string>;
     };
 
@@ -426,7 +425,7 @@ export class RegistryClient {
       }
     }
 
-    // Use reskill-app dist_tags array format
+    // Fall back to reskill-app's dist_tags array format
     const distTags = responseData.data?.dist_tags;
     if (distTags && Array.isArray(distTags)) {
       const tagEntry = distTags.find((t) => t.tag === version);
@@ -562,7 +561,7 @@ export class RegistryClient {
   ): Promise<PublishResponse> {
     const url = `${this.getApiBase()}/skills/publish`;
 
-    // Use short name as tarball top-level directory (without scope prefix)
+    // Extract short name as tarball top-level directory (without scope prefix)
     const shortName = getShortName(skillName);
 
     // Create tarball with short name as top-level directory

@@ -19,7 +19,7 @@ English | [简体中文](./README.zh-CN.md)
 
 ```bash
 npx reskill@latest init
-npx reskill@latest install github:anthropics/skills/frontend-design@latest
+npx reskill@latest install github:anthropics/skills/skills/frontend-design@latest
 npx reskill@latest list
 ```
 
@@ -43,36 +43,36 @@ npx reskill@latest <command>  # Or use npx directly
 
 ## Commands
 
-| Command | Alias | Description |
-| ------- | ----- | ----------- |
-| `init` | - | Initialize `skills.json` |
-| `install [skills...]` | `i` | Install one or more skills |
-| `list` | `ls` | List installed skills |
-| `info <skill>` | - | Show skill details |
-| `update [skill]` | `up` | Update skills |
-| `outdated` | - | Check for outdated skills |
-| `uninstall <skill>` | `un`, `rm`, `remove` | Remove a skill |
-| `publish [path]` | `pub` | Publish a skill to the registry ¹ |
-| `login` | - | Authenticate with the registry ¹ |
-| `logout` | - | Remove stored authentication ¹ |
-| `whoami` | - | Display current logged in user ¹ |
-| `doctor` | - | Diagnose environment and check for issues |
+| Command               | Alias                | Description                               |
+| --------------------- | -------------------- | ----------------------------------------- |
+| `init`                | -                    | Initialize `skills.json`                  |
+| `install [skills...]` | `i`                  | Install one or more skills                |
+| `list`                | `ls`                 | List installed skills                     |
+| `info <skill>`        | -                    | Show skill details                        |
+| `update [skill]`      | `up`                 | Update skills                             |
+| `outdated`            | -                    | Check for outdated skills                 |
+| `uninstall <skill>`   | `un`, `rm`, `remove` | Remove a skill                            |
+| `publish [path]`      | `pub`                | Publish a skill to the registry ¹         |
+| `login`               | -                    | Authenticate with the registry ¹          |
+| `logout`              | -                    | Remove stored authentication ¹            |
+| `whoami`              | -                    | Display current logged in user ¹          |
+| `doctor`              | -                    | Diagnose environment and check for issues |
 
 > ¹ Registry commands (`publish`, `login`, `logout`, `whoami`) require a private registry deployment. Not available for public use yet.
 | `completion install` | - | Install shell tab completion |
 
 ### Common Options
 
-| Option | Commands | Description |
-| ------ | -------- | ----------- |
-| `--no-save` | `install` | Install without saving to `skills.json` (for personal skills) |
-| `-g, --global` | `install`, `uninstall`, `list` | Install/manage skills globally (user directory) |
-| `-a, --agent <agents...>` | `install` | Specify target agents (e.g., `cursor`, `claude-code`) |
-| `--mode <mode>` | `install` | Installation mode: `symlink` (default) or `copy` |
-| `--all` | `install` | Install to all agents |
-| `-y, --yes` | `install`, `uninstall`, `publish` | Skip confirmation prompts |
-| `-f, --force` | `install` | Force reinstall even if already installed |
-| `-j, --json` | `list`, `info`, `outdated`, `doctor` | Output as JSON |
+| Option                    | Commands                             | Description                                                   |
+| ------------------------- | ------------------------------------ | ------------------------------------------------------------- |
+| `--no-save`               | `install`                            | Install without saving to `skills.json` (for personal skills) |
+| `-g, --global`            | `install`, `uninstall`, `list`       | Install/manage skills globally (user directory)               |
+| `-a, --agent <agents...>` | `install`                            | Specify target agents (e.g., `cursor`, `claude-code`)         |
+| `--mode <mode>`           | `install`                            | Installation mode: `symlink` (default) or `copy`              |
+| `--all`                   | `install`                            | Install to all agents                                         |
+| `-y, --yes`               | `install`, `uninstall`, `publish`    | Skip confirmation prompts                                     |
+| `-f, --force`             | `install`                            | Force reinstall even if already installed                     |
+| `-j, --json`              | `list`, `info`, `outdated`, `doctor` | Output as JSON                                                |
 
 Run `reskill <command> --help` for complete options and detailed usage.
 
@@ -129,26 +129,26 @@ npx reskill@latest install https://github.com/org/monorepo/tree/main/skills/plan
 
 Skills can be installed directly from HTTP/HTTPS URLs pointing to archive files:
 
-| Format | Example | Description |
-| ------ | ------- | ----------- |
-| HTTPS URL | `https://example.com/skill.tar.gz` | Direct download URL |
-| Aliyun OSS | `https://bucket.oss-cn-hangzhou.aliyuncs.com/skill.tar.gz` | Aliyun OSS URL |
-| AWS S3 | `https://bucket.s3.amazonaws.com/skill.tar.gz` | AWS S3 URL |
-| OSS Protocol | `oss://bucket/path/skill.tar.gz` | Shorthand for Aliyun OSS |
-| S3 Protocol | `s3://bucket/path/skill.tar.gz` | Shorthand for AWS S3 |
+| Format       | Example                                                    | Description              |
+| ------------ | ---------------------------------------------------------- | ------------------------ |
+| HTTPS URL    | `https://example.com/skill.tar.gz`                         | Direct download URL      |
+| Aliyun OSS   | `https://bucket.oss-cn-hangzhou.aliyuncs.com/skill.tar.gz` | Aliyun OSS URL           |
+| AWS S3       | `https://bucket.s3.amazonaws.com/skill.tar.gz`             | AWS S3 URL               |
+| OSS Protocol | `oss://bucket/path/skill.tar.gz`                           | Shorthand for Aliyun OSS |
+| S3 Protocol  | `s3://bucket/path/skill.tar.gz`                            | Shorthand for AWS S3     |
 
 **Supported archive formats:** `.tar.gz`, `.tgz`, `.zip`, `.tar`
 
 ## Version Specification
 
-| Format | Example | Description |
-| ------ | ------- | ----------- |
-| Exact | `@v1.0.0` | Lock to specific tag |
-| Latest | `@latest` | Get the latest tag |
-| Range | `@^2.0.0` | Semver compatible (>=2.0.0 <3.0.0) |
-| Branch | `@branch:develop` | Specific branch |
-| Commit | `@commit:abc1234` | Specific commit hash |
-| (none) | - | Default branch (main) |
+| Format | Example           | Description                        |
+| ------ | ----------------- | ---------------------------------- |
+| Exact  | `@v1.0.0`         | Lock to specific tag               |
+| Latest | `@latest`         | Get the latest tag                 |
+| Range  | `@^2.0.0`         | Semver compatible (>=2.0.0 <3.0.0) |
+| Branch | `@branch:develop` | Specific branch                    |
+| Commit | `@commit:abc1234` | Specific commit hash               |
+| (none) | -                 | Default branch (main)              |
 
 ## Configuration
 
@@ -213,13 +213,13 @@ For detailed publishing guidelines, see the [CLI Specification](./docs/cli-spec.
 
 ## Environment Variables
 
-| Variable | Description | Default |
-| -------- | ----------- | ------- |
-| `RESKILL_CACHE_DIR` | Global cache directory | `~/.reskill-cache` |
-| `RESKILL_TOKEN` | Auth token (takes precedence over ~/.reskillrc) | - |
-| `RESKILL_REGISTRY` | Default registry URL | `https://registry.reskill.dev` |
-| `DEBUG` | Enable debug logging | - |
-| `NO_COLOR` | Disable colored output | - |
+| Variable            | Description                                     | Default                        |
+| ------------------- | ----------------------------------------------- | ------------------------------ |
+| `RESKILL_CACHE_DIR` | Global cache directory                          | `~/.reskill-cache`             |
+| `RESKILL_TOKEN`     | Auth token (takes precedence over ~/.reskillrc) | -                              |
+| `RESKILL_REGISTRY`  | Default registry URL                            | `https://registry.reskill.dev` |
+| `DEBUG`             | Enable debug logging                            | -                              |
+| `NO_COLOR`          | Disable colored output                          | -                              |
 
 ## Development
 

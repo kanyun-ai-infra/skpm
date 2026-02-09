@@ -29,10 +29,6 @@ vi.mock('../../core/registry-client.js', () => {
   };
 });
 
-vi.mock('../../utils/registry-scope.js', () => ({
-  getApiPrefix: vi.fn().mockReturnValue('/api'),
-}));
-
 vi.mock('../../utils/registry.js', () => ({
   resolveRegistryForSearch: mockResolveRegistry,
 }));

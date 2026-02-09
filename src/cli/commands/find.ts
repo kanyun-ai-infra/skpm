@@ -20,7 +20,6 @@ import {
 } from '../../core/registry-client.js';
 import { logger } from '../../utils/logger.js';
 import { resolveRegistryForSearch } from '../../utils/registry.js';
-import { getApiPrefix } from '../../utils/registry-scope.js';
 
 // ============================================================================
 // Types
@@ -119,8 +118,7 @@ export async function findAction(query: string, options: FindOptions): Promise<v
   }
 
   const registry = resolveRegistryForSearch(options.registry);
-  const apiPrefix = getApiPrefix(registry);
-  const client = new RegistryClient({ registry, apiPrefix });
+  const client = new RegistryClient({ registry });
 
   try {
     const { items, total } = await client.search(query, { limit });

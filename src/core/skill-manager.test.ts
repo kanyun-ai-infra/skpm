@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -449,6 +450,129 @@ description: Test skill
       expect(installed).toEqual([]);
     });
   });
+
+  describe('installSkillsFromRepo', () => {
+    let repoDir: string;
+
+    function createLocalMultiSkillRepo(
+      skills: Array<{ name: string; description: string }>,
+    ): string {
+      const repoPath = path.join(repoDir, 'skills-repo');
+      fs.mkdirSync(repoPath, { recursive: true });
+      const skillsDir = path.join(repoPath, 'skills');
+      fs.mkdirSync(skillsDir, { recursive: true });
+
+      for (const s of skills) {
+        const skillDir = path.join(skillsDir, s.name);
+        fs.mkdirSync(skillDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(skillDir, 'SKILL.md'),
+          `---
+name: ${s.name}
+description: ${s.description}
+---
+# ${s.name}
+`,
+        );
+      }
+
+      execSync('git init -b main', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git add -A', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: repoPath, stdio: 'pipe' });
+
+      return `file://${repoPath}`;
+    }
+
+    beforeEach(() => {
+      repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reskill-multi-skill-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(repoDir, { recursive: true, force: true });
+    });
+
+    it('should let GitResolver handle invalid refs naturally', async () => {
+      // No pre-validation guard — GitResolver produces clear errors for bad refs
+      await expect(
+        skillManager.installSkillsFromRepo('my-skill', [], ['cursor'], {}),
+      ).rejects.toThrow(/Invalid skill reference/);
+    });
+
+    it('should return discovered skills when listOnly is true', async () => {
+      const fileUrl = createLocalMultiSkillRepo([
+        { name: 'pdf', description: 'PDF skill' },
+        { name: 'commit', description: 'Commit skill' },
+      ]);
+
+      const result = await skillManager.installSkillsFromRepo(
+        fileUrl,
+        [],
+        ['cursor'],
+        { listOnly: true },
+      );
+
+      expect(result.listOnly).toBe(true);
+      expect('skills' in result && result.skills).toHaveLength(2);
+      const names = (result as { skills: Array<{ name: string }> }).skills.map((s) => s.name).sort();
+      expect(names).toEqual(['commit', 'pdf']);
+    });
+
+    it('should install selected skills and save ref#name to skills.json', async () => {
+      const fileUrl = createLocalMultiSkillRepo([
+        { name: 'pdf', description: 'PDF skill' },
+        { name: 'commit', description: 'Commit skill' },
+      ]);
+
+      const result = await skillManager.installSkillsFromRepo(
+        fileUrl,
+        ['pdf'],
+        ['cursor'],
+        { save: true },
+      );
+
+      expect(result.listOnly).toBe(false);
+      if (result.listOnly) throw new Error('unexpected listOnly');
+      expect(result.installed).toHaveLength(1);
+      expect(result.installed[0].skill.name).toBe('pdf');
+
+      const canonicalPath = path.join(tempDir, '.agents', 'skills', 'pdf');
+      expect(fs.existsSync(canonicalPath)).toBe(true);
+      expect(fs.existsSync(path.join(canonicalPath, 'SKILL.md'))).toBe(true);
+
+      const config = JSON.parse(fs.readFileSync(path.join(tempDir, 'skills.json'), 'utf-8'));
+      expect(config.skills.pdf).toMatch(/#pdf$/);
+    });
+
+    it('should throw when no skills match and list available', async () => {
+      const fileUrl = createLocalMultiSkillRepo([
+        { name: 'pdf', description: 'PDF skill' },
+      ]);
+
+      await expect(
+        skillManager.installSkillsFromRepo(fileUrl, ['nonexistent'], ['cursor'], {}),
+      ).rejects.toThrow(/No matching skills found/);
+      await expect(
+        skillManager.installSkillsFromRepo(fileUrl, ['nonexistent'], ['cursor'], {}),
+      ).rejects.toThrow(/Available skills/);
+    });
+
+    it('should throw when repo has no valid SKILL.md', async () => {
+      const repoPath = path.join(repoDir, 'empty-repo');
+      fs.mkdirSync(repoPath, { recursive: true });
+      fs.writeFileSync(path.join(repoPath, 'README.md'), '# No skills');
+      execSync('git init -b main', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git add -A', { cwd: repoPath, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: repoPath, stdio: 'pipe' });
+
+      await expect(
+        skillManager.installSkillsFromRepo(`file://${repoPath}`, [], ['cursor'], {}),
+      ).rejects.toThrow(/No valid skills found/);
+    });
+  });
 });
 
 // Bug fix tests - These tests reproduce bugs before fixing them
@@ -759,8 +883,8 @@ describe('SkillManager with custom registries', () => {
     };
     fs.writeFileSync(path.join(tempDir, 'skills.json'), JSON.stringify(initialConfig, null, 2));
 
-    // Create SkillManager
-    const manager = new SkillManager(tempDir);
+    // Create SkillManager (verify it doesn't throw with registries)
+    new SkillManager(tempDir);
 
     // Read config to verify registries
     const configPath = path.join(tempDir, 'skills.json');
@@ -788,11 +912,9 @@ describe('SkillManager with custom registries', () => {
 
 describe('SkillManager source type detection', () => {
   let tempDir: string;
-  let manager: SkillManager;
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reskill-source-type-test-'));
-    manager = new SkillManager(tempDir);
   });
 
   afterEach(() => {
@@ -925,7 +1047,7 @@ describe('SkillManager installToAgentsFromRegistry with source_type', () => {
 
       // Mock installToAgentsFromGit
       const installFromGitSpy = vi
-        .spyOn(manager as unknown as { installToAgentsFromGit: Function }, 'installToAgentsFromGit')
+        .spyOn(manager as unknown as Record<string, (...args: unknown[]) => unknown>, 'installToAgentsFromGit')
         .mockResolvedValue({
           skill: { name: 'my-skill', path: '/tmp/skill', version: '1.0.0', source: 'github' },
           results: new Map([['cursor', { success: true, path: '/tmp', mode: 'symlink' }]]),
@@ -949,7 +1071,7 @@ describe('SkillManager installToAgentsFromRegistry with source_type', () => {
 
       // Mock installToAgentsFromGit
       const installFromGitSpy = vi
-        .spyOn(manager as unknown as { installToAgentsFromGit: Function }, 'installToAgentsFromGit')
+        .spyOn(manager as unknown as Record<string, (...args: unknown[]) => unknown>, 'installToAgentsFromGit')
         .mockResolvedValue({
           skill: { name: 'my-skill', path: '/tmp/skill', version: '1.0.0', source: 'github' },
           results: new Map([['cursor', { success: true, path: '/tmp', mode: 'symlink' }]]),
@@ -976,7 +1098,7 @@ describe('SkillManager installToAgentsFromRegistry with source_type', () => {
       // Mock installToAgentsFromHttp
       const installFromHttpSpy = vi
         .spyOn(
-          manager as unknown as { installToAgentsFromHttp: Function },
+          manager as unknown as Record<string, (...args: unknown[]) => unknown>,
           'installToAgentsFromHttp',
         )
         .mockResolvedValue({
@@ -1077,6 +1199,122 @@ describe('SkillManager installToAgentsFromRegistry with source_type', () => {
       await expect(manager.installToAgents('@kanyun/broken-skill', ['cursor'])).rejects.toThrow(
         'Missing source_url',
       );
+    });
+  });
+
+  describe('registry option override', () => {
+    it('should use options.registry instead of scope-based registry URL', async () => {
+      const customRegistryUrl = 'https://custom-registry.example.com';
+
+      const { RegistryClient } = await import('./registry-client.js');
+      vi.spyOn(RegistryClient.prototype, 'getSkillInfo').mockResolvedValue({
+        name: 'my-skill',
+        source_type: 'registry',
+      });
+
+      // Mock RegistryResolver to capture the overrideRegistryUrl
+      const registryResolver = (manager as unknown as { registryResolver: RegistryResolver })
+        .registryResolver;
+      const resolveSpy = vi.spyOn(registryResolver, 'resolve').mockResolvedValue({
+        parsed: {
+          scope: null,
+          name: 'my-skill',
+          version: '1.0.0',
+          fullName: 'my-skill',
+        },
+        shortName: 'my-skill',
+        version: '1.0.0',
+        registryUrl: customRegistryUrl,
+        tarball: Buffer.from('mock tarball'),
+        integrity: 'sha256-mockhash',
+      });
+
+      const mockSkillDir = path.join(tempDir, 'mock-skill-registry');
+      fs.mkdirSync(mockSkillDir, { recursive: true });
+      fs.writeFileSync(path.join(mockSkillDir, 'SKILL.md'), '# Skill');
+      vi.spyOn(registryResolver, 'extract').mockResolvedValue(mockSkillDir);
+
+      await manager.installToAgents('my-skill', ['cursor'], { registry: customRegistryUrl });
+
+      // Verify resolve was called with the custom registry URL
+      expect(resolveSpy).toHaveBeenCalledWith('my-skill', customRegistryUrl);
+    });
+
+    it('should use options.registry for RegistryClient when querying skill info', async () => {
+      const customRegistryUrl = 'https://custom-registry.example.com';
+
+      const { RegistryClient } = await import('./registry-client.js');
+      const getSkillInfoSpy = vi
+        .spyOn(RegistryClient.prototype, 'getSkillInfo')
+        .mockResolvedValue({
+          name: 'my-skill',
+          source_type: 'registry',
+        });
+
+      // Mock RegistryResolver
+      const registryResolver = (manager as unknown as { registryResolver: RegistryResolver })
+        .registryResolver;
+      vi.spyOn(registryResolver, 'resolve').mockResolvedValue({
+        parsed: {
+          scope: null,
+          name: 'my-skill',
+          version: '1.0.0',
+          fullName: 'my-skill',
+        },
+        shortName: 'my-skill',
+        version: '1.0.0',
+        registryUrl: customRegistryUrl,
+        tarball: Buffer.from('mock tarball'),
+        integrity: 'sha256-mockhash',
+      });
+
+      const mockSkillDir = path.join(tempDir, 'mock-skill-client');
+      fs.mkdirSync(mockSkillDir, { recursive: true });
+      fs.writeFileSync(path.join(mockSkillDir, 'SKILL.md'), '# Skill');
+      vi.spyOn(registryResolver, 'extract').mockResolvedValue(mockSkillDir);
+
+      await manager.installToAgents('my-skill', ['cursor'], { registry: customRegistryUrl });
+
+      // RegistryClient should have been created with the custom registry URL
+      // Verify getSkillInfo was called (client was constructed with custom URL)
+      expect(getSkillInfoSpy).toHaveBeenCalledWith('my-skill');
+    });
+
+    it('should fall back to scope-based registry when options.registry is not set', async () => {
+      const { RegistryClient } = await import('./registry-client.js');
+      vi.spyOn(RegistryClient.prototype, 'getSkillInfo').mockResolvedValue({
+        name: '@kanyun/scope-skill',
+        source_type: 'registry',
+      });
+
+      // Mock RegistryResolver
+      const registryResolver = (manager as unknown as { registryResolver: RegistryResolver })
+        .registryResolver;
+      const resolveSpy = vi.spyOn(registryResolver, 'resolve').mockResolvedValue({
+        parsed: {
+          scope: '@kanyun',
+          name: 'scope-skill',
+          version: '1.0.0',
+          fullName: '@kanyun/scope-skill',
+        },
+        shortName: 'scope-skill',
+        version: '1.0.0',
+        registryUrl: 'https://rush-test.zhenguanyu.com/',
+        tarball: Buffer.from('mock tarball'),
+        integrity: 'sha256-mockhash',
+      });
+
+      const mockSkillDir = path.join(tempDir, 'mock-scope-skill');
+      fs.mkdirSync(mockSkillDir, { recursive: true });
+      fs.writeFileSync(path.join(mockSkillDir, 'SKILL.md'), '# Skill');
+      vi.spyOn(registryResolver, 'extract').mockResolvedValue(mockSkillDir);
+
+      // No registry option — should resolve URL from scope at the entry point
+      await manager.installToAgents('@kanyun/scope-skill', ['cursor']);
+
+      // resolve should receive the pre-resolved registry URL (not undefined)
+      // because installToAgentsFromRegistry resolves the URL once and passes it down
+      expect(resolveSpy).toHaveBeenCalledWith('@kanyun/scope-skill', 'https://rush.zhenguanyu.com/');
     });
   });
 });
