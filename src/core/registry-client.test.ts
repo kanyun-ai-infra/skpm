@@ -116,16 +116,12 @@ describe('RegistryClient', () => {
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () =>
-          Promise.resolve({ success: true, user: { id: 'u', handle: 'h' } }),
+        json: () => Promise.resolve({ success: true, user: { id: 'u', handle: 'h' } }),
       });
 
       await client.whoami();
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        `${testRegistry}/api/auth/me`,
-        expect.any(Object),
-      );
+      expect(mockFetch).toHaveBeenCalledWith(`${testRegistry}/api/auth/me`, expect.any(Object));
     });
 
     it('should use custom apiPrefix for whoami', async () => {
@@ -133,8 +129,7 @@ describe('RegistryClient', () => {
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () =>
-          Promise.resolve({ success: true, user: { id: 'u', handle: 'h' } }),
+        json: () => Promise.resolve({ success: true, user: { id: 'u', handle: 'h' } }),
       });
 
       await client.whoami();
@@ -153,8 +148,7 @@ describe('RegistryClient', () => {
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () =>
-          Promise.resolve({ success: true, user: { id: 'u', handle: 'h' } }),
+        json: () => Promise.resolve({ success: true, user: { id: 'u', handle: 'h' } }),
       });
 
       await client.whoami();
@@ -175,8 +169,7 @@ describe('RegistryClient', () => {
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () =>
-          Promise.resolve({ success: true, user: { id: 'u', handle: 'h' } }),
+        json: () => Promise.resolve({ success: true, user: { id: 'u', handle: 'h' } }),
       });
 
       await client.loginCli();
@@ -196,8 +189,7 @@ describe('RegistryClient', () => {
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () =>
-          Promise.resolve({ success: true, data: { name: '@kanyun/test' } }),
+        json: () => Promise.resolve({ success: true, data: { name: '@kanyun/test' } }),
       });
 
       await client.getSkillInfo('@kanyun/test');
@@ -283,8 +275,7 @@ describe('RegistryClient', () => {
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () =>
-          Promise.resolve({ 'dist-tags': { latest: '1.0.0' } }),
+        json: () => Promise.resolve({ 'dist-tags': { latest: '1.0.0' } }),
       });
 
       await client.resolveVersion('@kanyun/test', 'latest');
@@ -1379,6 +1370,192 @@ describe('RegistryClient', () => {
 
       await expect(client.getSkillInfo('@kanyun/some-skill')).rejects.toThrow(
         'Failed to get skill info',
+      );
+    });
+  });
+
+  // ============================================================================
+  // search tests
+  // ============================================================================
+
+  describe('search', () => {
+    beforeEach(() => {
+      client = new RegistryClient({ registry: testRegistry, token: testToken });
+    });
+
+    /** Build a mock search API response matching the server format */
+    function mockSearchResponse(
+      data: Record<string, unknown>[],
+      totalItems: number,
+    ): { success: boolean; data: Record<string, unknown>[]; meta: Record<string, unknown> } {
+      return {
+        success: true,
+        data,
+        meta: {
+          pagination: {
+            currentPage: 1,
+            totalPages: Math.ceil(totalItems / 10),
+            totalItems,
+            itemsPerPage: 10,
+            hasNext: false,
+            hasPrevious: false,
+          },
+        },
+      };
+    }
+
+    it('should search skills with query', async () => {
+      const mockResults = [
+        {
+          name: '@kanyun/planning-with-files',
+          description: 'Planning skill',
+          latest_version: '2.4.5',
+        },
+        {
+          name: '@kanyun/typescript-best-practices',
+          description: 'TS skill',
+          latest_version: '1.0.0',
+        },
+      ];
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockSearchResponse(mockResults, 2)),
+      });
+
+      const result = await client.search('planning');
+
+      expect(result.items).toHaveLength(2);
+      expect(result.items[0].name).toBe('@kanyun/planning-with-files');
+      expect(result.total).toBe(2);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${testRegistry}/api/skills?q=planning`,
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${testToken}`,
+          }),
+        }),
+      );
+    });
+
+    it('should pass limit and offset parameters', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockSearchResponse([], 0)),
+      });
+
+      await client.search('test', { limit: 5, offset: 10 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${testRegistry}/api/skills?q=test&limit=5&offset=10`,
+        expect.any(Object),
+      );
+    });
+
+    it('should return empty results when no matches', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockSearchResponse([], 0)),
+      });
+
+      const result = await client.search('nonexistent-xyz');
+
+      expect(result.items).toHaveLength(0);
+      expect(result.total).toBe(0);
+    });
+
+    it('should handle response without meta field', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ success: true, data: [{ name: 'test' }] }),
+      });
+
+      const result = await client.search('test');
+
+      expect(result.items).toHaveLength(1);
+      // Falls back to data.length when no meta.pagination
+      expect(result.total).toBe(1);
+    });
+
+    it('should handle response without data field', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ success: true }),
+      });
+
+      const result = await client.search('test');
+
+      expect(result.items).toHaveLength(0);
+      expect(result.total).toBe(0);
+    });
+
+    it('should throw RegistryError on search failure', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ error: 'Internal server error' }),
+      });
+
+      await expect(client.search('test')).rejects.toThrow('Internal server error');
+    });
+
+    it('should throw RegistryError with default message', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: () => Promise.resolve({}),
+      });
+
+      await expect(client.search('test')).rejects.toThrow('Search failed: 503');
+    });
+
+    it('should use custom apiPrefix for search', async () => {
+      client = new RegistryClient({
+        registry: testRegistry,
+        token: testToken,
+        apiPrefix: '/api/reskill',
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockSearchResponse([], 0)),
+      });
+
+      await client.search('test');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${testRegistry}/api/reskill/skills?q=test`,
+        expect.any(Object),
+      );
+    });
+
+    it('should work without authentication token', async () => {
+      client = new RegistryClient({ registry: testRegistry });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockSearchResponse([], 0)),
+      });
+
+      await client.search('test');
+
+      const headers = mockFetch.mock.calls[0][1].headers;
+      expect(headers.Authorization).toBeUndefined();
+    });
+
+    it('should encode query parameter properly', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockSearchResponse([], 0)),
+      });
+
+      await client.search('test skill with spaces');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${testRegistry}/api/skills?q=test+skill+with+spaces`,
+        expect.any(Object),
       );
     });
   });

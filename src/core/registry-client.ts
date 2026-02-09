@@ -74,6 +74,43 @@ export interface SkillMetadataResponse {
   error?: string;
 }
 
+export interface SearchResultItem {
+  /** Full skill name (e.g., "@kanyun/planning-with-files") */
+  name: string;
+  /** Description */
+  description?: string;
+  /** Latest version */
+  latest_version?: string;
+  /** Keywords (parsed from metadata_json) */
+  keywords?: string[];
+  /** Publisher info */
+  publisher?: { handle: string };
+  /** Last updated time */
+  updated_at?: string;
+}
+
+export interface SearchPagination {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  itemsPerPage: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
+}
+
+export interface SearchResponse {
+  /** Whether request succeeded */
+  success: boolean;
+  /** Error message (if failed) */
+  error?: string;
+  /** Search results */
+  data?: SearchResultItem[];
+  /** Pagination metadata */
+  meta?: {
+    pagination?: SearchPagination;
+  };
+}
+
 export interface DownloadResult {
   tarball: Buffer;
   integrity: string;
@@ -214,7 +251,7 @@ export class RegistryClient {
           const content = fs.readFileSync(filePath);
           const stat = fs.statSync(filePath);
 
-          // 如果提供了 shortName，则在路径前添加顶层目录
+          // If shortName is provided, use it as top-level directory in tarball path
           const entryName = shortName ? `${shortName}/${file}` : file;
 
           tarPack.entry(
@@ -234,16 +271,16 @@ export class RegistryClient {
   }
 
   // ============================================================================
-  // Skill Info Methods (页面发布适配)
+  // Skill Info Methods (for web-published skill support)
   // ============================================================================
 
   /**
-   * 获取 skill 基本信息（包含 source_type）
-   * 用于 install 命令判断安装逻辑分支
+   * Get skill basic info (including source_type).
+   * Used by install command to decide installation logic branch.
    *
-   * @param skillName - 完整名称，如 @kanyun/my-skill
-   * @returns Skill 基本信息
-   * @throws RegistryError 如果 skill 不存在或请求失败
+   * @param skillName - Full name, e.g. @kanyun/my-skill
+   * @returns Skill basic info
+   * @throws RegistryError if skill not found or request fails
    */
   async getSkillInfo(skillName: string): Promise<SkillInfo> {
     const url = `${this.getApiBase()}/skills/${encodeURIComponent(skillName)}`;
@@ -256,7 +293,7 @@ export class RegistryClient {
     if (!response.ok) {
       const data = (await response.json()) as { error?: string };
 
-      // 404 时给出明确的 skill 不存在错误
+      // Give explicit "skill not found" error for 404
       if (response.status === 404) {
         throw new RegistryError(`Skill not found: ${skillName}`, response.status, data);
       }
@@ -268,13 +305,66 @@ export class RegistryClient {
       );
     }
 
-    // API 返回格式: { success: true, data: { ... } }
+    // API response format: { success: true, data: { ... } }
     const responseData = (await response.json()) as {
       success?: boolean;
       data?: SkillInfo;
     };
 
     return responseData.data || (responseData as unknown as SkillInfo);
+  }
+
+  // ============================================================================
+  // Search Methods
+  // ============================================================================
+
+  /**
+   * Search for skills in the registry
+   *
+   * @param query - Search query string
+   * @param options - Search options (limit, offset)
+   * @returns Array of matching skills
+   * @throws RegistryError if the request fails
+   *
+   * @example
+   * const results = await client.search('typescript');
+   * const results = await client.search('planning', { limit: 5 });
+   */
+  async search(
+    query: string,
+    options: { limit?: number; offset?: number } = {},
+  ): Promise<{ items: SearchResultItem[]; total: number }> {
+    const params = new URLSearchParams({ q: query });
+
+    if (options.limit !== undefined) {
+      params.set('limit', String(options.limit));
+    }
+    if (options.offset !== undefined) {
+      params.set('offset', String(options.offset));
+    }
+
+    const url = `${this.getApiBase()}/skills?${params.toString()}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      throw new RegistryError(
+        data.error || `Search failed: ${response.status}`,
+        response.status,
+        data,
+      );
+    }
+
+    const data = (await response.json()) as SearchResponse;
+
+    return {
+      items: data.data || [],
+      total: data.meta?.pagination?.totalItems ?? data.data?.length ?? 0,
+    };
   }
 
   // ============================================================================
@@ -291,17 +381,17 @@ export class RegistryClient {
    *
    * @example
    * await client.resolveVersion('@kanyun/test-skill', 'latest') // '2.4.5'
-   * await client.resolveVersion('@kanyun/test-skill', '2.4.5') // '2.4.5' (直接返回)
+   * await client.resolveVersion('@kanyun/test-skill', '2.4.5') // '2.4.5' (returns as-is)
    */
   async resolveVersion(skillName: string, tagOrVersion?: string): Promise<string> {
     const version = tagOrVersion || 'latest';
 
-    // 如果是 semver 版本号，直接返回
+    // If it's a semver version, return as-is
     if (/^\d+\.\d+\.\d+/.test(version)) {
       return version;
     }
 
-    // 否则视为 tag，需要查询 dist-tags
+    // Otherwise treat as tag and query dist-tags
     const url = `${this.getApiBase()}/skills/${encodeURIComponent(skillName)}`;
 
     const response = await fetch(url, {
@@ -318,17 +408,17 @@ export class RegistryClient {
       );
     }
 
-    // API 返回格式: { success: true, data: { dist_tags: [{ tag, version }] } }
+    // API response format: { success: true, data: { dist_tags: [{ tag, version }] } }
     const responseData = (await response.json()) as {
       success?: boolean;
       data?: {
         dist_tags?: Array<{ tag: string; version: string }>;
       };
-      // 兼容 npm 风格的 dist-tags
+      // Compatible with npm-style dist-tags
       'dist-tags'?: Record<string, string>;
     };
 
-    // 优先使用 npm 风格的 dist-tags（如果存在）
+    // Prefer npm-style dist-tags if present
     if (responseData['dist-tags']) {
       const resolvedVersion = responseData['dist-tags'][version];
       if (resolvedVersion) {
@@ -336,7 +426,7 @@ export class RegistryClient {
       }
     }
 
-    // 使用 reskill-app 的 dist_tags 数组格式
+    // Use reskill-app dist_tags array format
     const distTags = responseData.data?.dist_tags;
     if (distTags && Array.isArray(distTags)) {
       const tagEntry = distTags.find((t) => t.tag === version);
@@ -440,7 +530,7 @@ export class RegistryClient {
    * RegistryClient.verifyIntegrity(buffer, 'sha256-abc123...') // true or false
    */
   static verifyIntegrity(content: Buffer, expectedIntegrity: string): boolean {
-    // 解析 integrity 格式: algorithm-hash
+    // Parse integrity format: algorithm-hash
     const match = expectedIntegrity.match(/^(\w+)-(.+)$/);
     if (!match) {
       throw new Error(`Invalid integrity format: ${expectedIntegrity}`);
@@ -448,7 +538,7 @@ export class RegistryClient {
 
     const [, algorithm, expectedHash] = match;
 
-    // 只支持 sha256 和 sha512
+    // Only sha256 and sha512 are supported
     if (algorithm !== 'sha256' && algorithm !== 'sha512') {
       throw new Error(`Unsupported integrity algorithm: ${algorithm}`);
     }
@@ -472,7 +562,7 @@ export class RegistryClient {
   ): Promise<PublishResponse> {
     const url = `${this.getApiBase()}/skills/publish`;
 
-    // 提取短名称作为 tarball 顶层目录（不含 scope 前缀）
+    // Use short name as tarball top-level directory (without scope prefix)
     const shortName = getShortName(skillName);
 
     // Create tarball with short name as top-level directory
