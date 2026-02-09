@@ -29,8 +29,8 @@ import { RegistryResolver } from './registry-resolver.js';
 import {
   discoverSkillsInDir,
   filterSkillsByName,
-  parseSkillFromDir,
   type ParsedSkillWithPath,
+  parseSkillFromDir,
 } from './skill-parser.js';
 
 /**
@@ -749,15 +749,16 @@ export class SkillManager {
     options: InstallOptions & { listOnly?: boolean } = {},
   ): Promise<
     | { listOnly: true; skills: ParsedSkillWithPath[] }
-    | { listOnly: false; installed: Array<{ skill: InstalledSkill; results: Map<AgentType, InstallResult> }> }
+    | {
+        listOnly: false;
+        installed: Array<{
+          skill: InstalledSkill;
+          results: Map<AgentType, InstallResult>;
+        }>;
+        skipped: Array<{ name: string; reason: string }>;
+      }
   > {
-    const { listOnly = false, save = true, mode = 'symlink' } = options;
-
-    if (this.isRegistrySource(ref) || this.isHttpSource(ref)) {
-      throw new Error(
-        'Multi-skill install (--skill / --list) is only supported for Git repository references (e.g. github:user/repo or https://github.com/user/repo).',
-      );
-    }
+    const { listOnly = false, force = false, save = true, mode = 'symlink' } = options;
 
     const refForResolve = ref.replace(/#.*$/, '').trim();
     const resolved = await this.resolver.resolve(refForResolve);
@@ -804,14 +805,40 @@ export class SkillManager {
       installDir: customInstallDir,
     });
 
-    const installed: Array<{ skill: InstalledSkill; results: Map<AgentType, InstallResult> }> = [];
+    const installed: Array<{
+      skill: InstalledSkill;
+      results: Map<AgentType, InstallResult>;
+    }> = [];
+    const skipped: Array<{ name: string; reason: string }> = [];
+
+    const skillSource = `${parsed.registry}:${parsed.owner}/${parsed.repo}${parsed.subPath ? `/${parsed.subPath}` : ''}`;
 
     for (const skillInfo of selected) {
       const semanticVersion = skillInfo.version ?? gitRef;
+
+      // Skip already-installed skills unless --force is set
+      if (!force) {
+        const existingSkill = this.getInstalledSkill(skillInfo.name);
+        if (existingSkill) {
+          const locked = this.lockManager.get(skillInfo.name);
+          const lockedRef = locked?.ref || locked?.version;
+          if (lockedRef === gitRef) {
+            const reason = `already installed at ${gitRef}`;
+            logger.info(`${skillInfo.name}@${gitRef} is already installed, skipping`);
+            skipped.push({ name: skillInfo.name, reason });
+            continue;
+          }
+          // Different version installed — allow upgrade without --force
+          // Only skip when the exact same ref is already locked
+        }
+      }
+
       logger.package(
         `Installing ${skillInfo.name}@${gitRef} to ${targetAgents.length} agent(s)...`,
       );
 
+      // Note: force is handled at the SkillManager level (skip-if-installed check above).
+      // The Installer always overwrites (remove + copy), so no force flag is needed there.
       const results = await installer.installToAgents(
         skillInfo.dirPath,
         skillInfo.name,
@@ -821,7 +848,7 @@ export class SkillManager {
 
       if (!this.isGlobal) {
         this.lockManager.lockSkill(skillInfo.name, {
-          source: `${parsed.registry}:${parsed.owner}/${parsed.repo}${parsed.subPath ? `/${parsed.subPath}` : ''}`,
+          source: skillSource,
           version: semanticVersion,
           ref: gitRef,
           resolved: repoUrl,
@@ -842,13 +869,13 @@ export class SkillManager {
           name: skillInfo.name,
           path: skillInfo.dirPath,
           version: semanticVersion,
-          source: `${parsed.registry}:${parsed.owner}/${parsed.repo}`,
+          source: skillSource,
         },
         results,
       });
     }
 
-    return { listOnly: false, installed };
+    return { listOnly: false, installed, skipped };
   }
 
   /**

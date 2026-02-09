@@ -93,6 +93,49 @@ describe('CLI Integration: install --skill / --list (multi-skill repo)', () => {
     });
   });
 
+  describe('--force', () => {
+    it('should re-install skill when --force is used', () => {
+      // First install
+      const first = runCli(`install ${repoUrl} --skill pdf -a cursor -y`, tempDir);
+      expect(first.exitCode).toBe(0);
+      expect(pathExists(path.join(tempDir, '.cursor', 'skills', 'pdf', 'SKILL.md'))).toBe(true);
+
+      // Second install with --force should actually reinstall
+      const second = runCli(`install ${repoUrl} --skill pdf -a cursor -y --force`, tempDir);
+      expect(second.exitCode).toBe(0);
+      const secondOutput = getOutput(second);
+      expect(secondOutput).toMatch(/Installed|Installing/i);
+      expect(pathExists(path.join(tempDir, '.cursor', 'skills', 'pdf', 'SKILL.md'))).toBe(true);
+    });
+
+    it('should skip already-installed skill without --force', () => {
+      // First install
+      runCli(`install ${repoUrl} --skill pdf -a cursor -y`, tempDir);
+
+      // Second install without --force should skip
+      const second = runCli(`install ${repoUrl} --skill pdf -a cursor -y`, tempDir);
+      expect(second.exitCode).toBe(0);
+      const output = getOutput(second);
+      expect(output).toMatch(/already installed|skipping/i);
+    });
+  });
+
+  describe('--no-save', () => {
+    it('should not modify skills.json when --no-save is used', () => {
+      const configBefore = readSkillsJson(tempDir);
+      const skillsBefore = configBefore.skills ?? {};
+
+      const result = runCli(`install ${repoUrl} --skill pdf -a cursor -y --no-save`, tempDir);
+      expect(result.exitCode).toBe(0);
+      expect(pathExists(path.join(tempDir, '.cursor', 'skills', 'pdf', 'SKILL.md'))).toBe(true);
+
+      // skills.json should not have the new skill entry
+      const configAfter = readSkillsJson(tempDir);
+      const skillsAfter = configAfter.skills ?? {};
+      expect(skillsAfter).toEqual(skillsBefore);
+    });
+  });
+
   describe('with other options', () => {
     it('should work with -a cursor and -y', () => {
       const result = runCli(`install ${repoUrl} --skill pdf -a cursor -y`, tempDir);
