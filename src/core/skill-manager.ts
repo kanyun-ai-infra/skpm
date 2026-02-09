@@ -760,12 +760,6 @@ export class SkillManager {
   > {
     const { listOnly = false, force = false, save = true, mode = 'symlink' } = options;
 
-    if (this.isRegistrySource(ref) || this.isHttpSource(ref)) {
-      throw new Error(
-        'Multi-skill install (--skill / --list) is only supported for Git repository references (e.g. github:user/repo or https://github.com/user/repo).',
-      );
-    }
-
     const refForResolve = ref.replace(/#.*$/, '').trim();
     const resolved = await this.resolver.resolve(refForResolve);
     const { parsed, repoUrl } = resolved;

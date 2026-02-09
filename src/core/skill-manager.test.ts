@@ -493,14 +493,11 @@ description: ${s.description}
       fs.rmSync(repoDir, { recursive: true, force: true });
     });
 
-    it('should reject HTTP and registry refs', async () => {
+    it('should let GitResolver handle invalid refs naturally', async () => {
+      // No pre-validation guard — GitResolver produces clear errors for bad refs
       await expect(
-        skillManager.installSkillsFromRepo('https://example.com/skill.tar.gz', [], ['cursor'], {}),
-      ).rejects.toThrow(/only supported for Git/);
-
-      await expect(
-        skillManager.installSkillsFromRepo('@scope/skill@1.0.0', [], ['cursor'], {}),
-      ).rejects.toThrow(/only supported for Git/);
+        skillManager.installSkillsFromRepo('my-skill', [], ['cursor'], {}),
+      ).rejects.toThrow(/Invalid skill reference/);
     });
 
     it('should return discovered skills when listOnly is true', async () => {
@@ -536,7 +533,8 @@ description: ${s.description}
       );
 
       expect(result.listOnly).toBe(false);
-      expect('installed' in result && result.installed).toHaveLength(1);
+      if (result.listOnly) throw new Error('unexpected listOnly');
+      expect(result.installed).toHaveLength(1);
       expect(result.installed[0].skill.name).toBe('pdf');
 
       const canonicalPath = path.join(tempDir, '.agents', 'skills', 'pdf');
@@ -885,8 +883,8 @@ describe('SkillManager with custom registries', () => {
     };
     fs.writeFileSync(path.join(tempDir, 'skills.json'), JSON.stringify(initialConfig, null, 2));
 
-    // Create SkillManager
-    const manager = new SkillManager(tempDir);
+    // Create SkillManager (verify it doesn't throw with registries)
+    new SkillManager(tempDir);
 
     // Read config to verify registries
     const configPath = path.join(tempDir, 'skills.json');
@@ -914,11 +912,9 @@ describe('SkillManager with custom registries', () => {
 
 describe('SkillManager source type detection', () => {
   let tempDir: string;
-  let manager: SkillManager;
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reskill-source-type-test-'));
-    manager = new SkillManager(tempDir);
   });
 
   afterEach(() => {
@@ -1051,7 +1047,7 @@ describe('SkillManager installToAgentsFromRegistry with source_type', () => {
 
       // Mock installToAgentsFromGit
       const installFromGitSpy = vi
-        .spyOn(manager as unknown as { installToAgentsFromGit: Function }, 'installToAgentsFromGit')
+        .spyOn(manager as unknown as Record<string, (...args: unknown[]) => unknown>, 'installToAgentsFromGit')
         .mockResolvedValue({
           skill: { name: 'my-skill', path: '/tmp/skill', version: '1.0.0', source: 'github' },
           results: new Map([['cursor', { success: true, path: '/tmp', mode: 'symlink' }]]),
@@ -1075,7 +1071,7 @@ describe('SkillManager installToAgentsFromRegistry with source_type', () => {
 
       // Mock installToAgentsFromGit
       const installFromGitSpy = vi
-        .spyOn(manager as unknown as { installToAgentsFromGit: Function }, 'installToAgentsFromGit')
+        .spyOn(manager as unknown as Record<string, (...args: unknown[]) => unknown>, 'installToAgentsFromGit')
         .mockResolvedValue({
           skill: { name: 'my-skill', path: '/tmp/skill', version: '1.0.0', source: 'github' },
           results: new Map([['cursor', { success: true, path: '/tmp', mode: 'symlink' }]]),
@@ -1102,7 +1098,7 @@ describe('SkillManager installToAgentsFromRegistry with source_type', () => {
       // Mock installToAgentsFromHttp
       const installFromHttpSpy = vi
         .spyOn(
-          manager as unknown as { installToAgentsFromHttp: Function },
+          manager as unknown as Record<string, (...args: unknown[]) => unknown>,
           'installToAgentsFromHttp',
         )
         .mockResolvedValue({
