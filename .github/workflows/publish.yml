@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - 'feature-*'
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -11,8 +12,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    # Only run on the main repository, not on forks
-    if: github.repository == 'kanyun-inc/reskill'
+    if: github.repository == 'kanyun-inc/reskill' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
       pull-requests: write
@@ -49,5 +49,67 @@ jobs:
           commit: 'chore: version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+
+  beta-release:
+    name: Beta Release
+    runs-on: ubuntu-latest
+    if: github.repository == 'kanyun-inc/reskill' && startsWith(github.ref, 'refs/heads/feature-')
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check pre-release mode
+        id: check-pre
+        run: |
+          if [ -f ".changeset/pre.json" ]; then
+            TAG=$(jq -r '.tag' .changeset/pre.json)
+            if [ "$TAG" = "beta" ]; then
+              echo "is_pre=true" >> $GITHUB_OUTPUT
+            else
+              echo "::warning::pre.json exists but tag is '$TAG', expected 'beta'. Skipping."
+              echo "is_pre=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "is_pre=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Skip notice
+        if: steps.check-pre.outputs.is_pre != 'true'
+        run: echo "::notice::Not in beta pre-release mode. Skipping beta publish."
+
+      - name: Version packages (beta)
+        if: steps.check-pre.outputs.is_pre == 'true'
+        run: pnpm changeset version
+
+      - name: Run tests
+        if: steps.check-pre.outputs.is_pre == 'true'
+        run: pnpm test:run
+
+      - name: Build
+        if: steps.check-pre.outputs.is_pre == 'true'
+        run: pnpm build
+
+      - name: Publish beta to npm
+        if: steps.check-pre.outputs.is_pre == 'true'
+        run: pnpm changeset publish --tag beta
+        env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
