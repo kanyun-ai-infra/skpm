@@ -124,6 +124,7 @@ export class GitResolver {
 
     // Parse owner/repo and possible subPath
     // E.g.: user/repo or org/monorepo/skills/pdf
+    // Also handle GitHub web URL style: owner/repo/tree/branch/path
     const parts = remaining.split('/');
 
     if (parts.length < 2) {
@@ -132,7 +133,19 @@ export class GitResolver {
 
     const owner = parts[0];
     const repo = parts[1];
-    const subPath = parts.length > 2 ? parts.slice(2).join('/') : undefined;
+    let subPath: string | undefined;
+
+    // Check for GitHub/GitLab web URL pattern: owner/repo/(tree|blob|raw)/branch/path
+    // e.g. vercel-labs/skills/tree/main/skills/find-skills
+    // Only apply this heuristic when no explicit @version is provided.
+    // With @version, treat tree/blob/raw as literal directory names (standard monorepo subPath).
+    if (parts.length >= 4 && ['tree', 'blob', 'raw'].includes(parts[2]) && !version) {
+      const branch = parts[3];
+      version = `branch:${branch}`;
+      subPath = parts.length > 4 ? parts.slice(4).join('/') : undefined;
+    } else {
+      subPath = parts.length > 2 ? parts.slice(2).join('/') : undefined;
+    }
 
     return {
       registry,

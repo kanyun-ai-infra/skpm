@@ -101,14 +101,37 @@ function parseFrontmatter(content: string): {
   const yamlContent = match[1];
   const markdownContent = match[2];
 
-  // Simple YAML parsing (supports basic key: value format and one level of nesting)
+  // Simple YAML parsing (supports basic key: value, one level of nesting,
+  // block scalars (| and >), and plain scalars spanning multiple indented lines)
   const data: Record<string, unknown> = {};
   const lines = yamlContent.split('\n');
   let currentKey = '';
   let currentValue = '';
   let inMultiline = false;
   let inNestedObject = false;
+  let inPlainScalar = false;
   let nestedObject: Record<string, unknown> = {};
+
+  /**
+   * Save the current key/value accumulated so far, then reset state.
+   */
+  function flushCurrent(): void {
+    if (!currentKey) return;
+
+    if (inNestedObject) {
+      data[currentKey] = nestedObject;
+      nestedObject = {};
+      inNestedObject = false;
+    } else if (inPlainScalar || inMultiline) {
+      data[currentKey] = currentValue.trim();
+      inPlainScalar = false;
+      inMultiline = false;
+    } else {
+      data[currentKey] = parseYamlValue(currentValue.trim());
+    }
+    currentKey = '';
+    currentValue = '';
+  }
 
   for (const line of lines) {
     const trimmedLine = line.trim();
@@ -117,65 +140,72 @@ function parseFrontmatter(content: string): {
       continue;
     }
 
-    // Check if it's a nested key: value pair (indented with 2 spaces)
-    const nestedMatch = line.match(/^ {2}([a-zA-Z_-]+):\s*(.*)$/);
-    if (nestedMatch && inNestedObject) {
-      const [, nestedKey, nestedValue] = nestedMatch;
-      nestedObject[nestedKey] = parseYamlValue(nestedValue.trim());
+    const isIndented = line.startsWith('  ');
+
+    // ---- Inside a block scalar (| or >) ----
+    if (inMultiline) {
+      if (isIndented) {
+        currentValue += (currentValue ? '\n' : '') + line.slice(2);
+        continue;
+      }
+      // Unindented line ends the block scalar — fall through to top-level parsing
+      flushCurrent();
+    }
+
+    // ---- Inside a plain scalar (multiline value without | or >) ----
+    if (inPlainScalar) {
+      if (isIndented) {
+        // Continuation line: join with a space (YAML plain scalar folding)
+        currentValue += ` ${trimmedLine}`;
+        continue;
+      }
+      // Unindented line ends the plain scalar — fall through to top-level parsing
+      flushCurrent();
+    }
+
+    // ---- Inside a nested object ----
+    if (inNestedObject && isIndented) {
+      const nestedMatch = line.match(/^ {2}([a-zA-Z_-]+):\s*(.*)$/);
+      if (nestedMatch) {
+        const [, nestedKey, nestedValue] = nestedMatch;
+        nestedObject[nestedKey] = parseYamlValue(nestedValue.trim());
+        continue;
+      }
+      // Indented line that isn't a nested key:value — this key was actually
+      // a plain scalar, not a nested object. Switch modes.
+      inNestedObject = false;
+      inPlainScalar = true;
+      currentValue = trimmedLine;
       continue;
     }
 
-    // Check if it's a new key: value pair (no indent)
+    // ---- Top-level key: value ----
     const keyValueMatch = line.match(/^([a-zA-Z_-]+):\s*(.*)$/);
-
-    if (keyValueMatch && !inMultiline) {
-      // Save previous nested object if any
-      if (inNestedObject && currentKey) {
-        data[currentKey] = nestedObject;
-        nestedObject = {};
-        inNestedObject = false;
-      }
-
-      // Save previous value
-      if (currentKey && !inNestedObject) {
-        data[currentKey] = parseYamlValue(currentValue.trim());
-      }
+    if (keyValueMatch) {
+      flushCurrent();
 
       currentKey = keyValueMatch[1];
       currentValue = keyValueMatch[2];
 
-      // Check if it's start of multiline string
       if (currentValue === '|' || currentValue === '>') {
         inMultiline = true;
         currentValue = '';
       } else if (currentValue === '') {
-        // Empty value - might be start of nested object
+        // Empty value — could be nested object or plain scalar; peek at next lines
         inNestedObject = true;
         nestedObject = {};
       }
-    } else if (inMultiline && line.startsWith('  ')) {
-      // Multiline string continuation
-      currentValue += (currentValue ? '\n' : '') + line.slice(2);
-    } else if (inMultiline && !line.startsWith('  ')) {
-      // Multiline string end
-      inMultiline = false;
-      data[currentKey] = currentValue.trim();
+      continue;
+    }
 
-      // Try to parse new line
-      const newKeyMatch = line.match(/^([a-zA-Z_-]+):\s*(.*)$/);
-      if (newKeyMatch) {
-        currentKey = newKeyMatch[1];
-        currentValue = newKeyMatch[2];
-      }
+    // ---- Unindented line that isn't key:value while in nested object ----
+    if (inNestedObject) {
+      flushCurrent();
     }
   }
 
-  // Save last value
-  if (inNestedObject && currentKey) {
-    data[currentKey] = nestedObject;
-  } else if (currentKey) {
-    data[currentKey] = parseYamlValue(currentValue.trim());
-  }
+  // Save last accumulated value
+  flushCurrent();
 
   return { data, content: markdownContent };
 }
@@ -525,7 +555,16 @@ export function filterSkillsByName(
   names: string[],
 ): ParsedSkillWithPath[] {
   const normalized = names.map((n) => n.toLowerCase());
-  return skills.filter((skill) => normalized.includes(skill.name.toLowerCase()));
+  return skills.filter((skill) => {
+    // Match against SKILL.md name field
+    if (normalized.includes(skill.name.toLowerCase())) {
+      return true;
+    }
+    // Also match against the directory name (basename of dirPath)
+    // Users naturally refer to skills by their directory name
+    const dirName = path.basename(skill.dirPath).toLowerCase();
+    return normalized.includes(dirName);
+  });
 }
 
 /**

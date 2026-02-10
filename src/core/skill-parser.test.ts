@@ -287,6 +287,55 @@ Content.
       expect(result?.version).toBe('1.0.0');
     });
 
+    it('should parse YAML plain scalar (multiline description without | or >)', () => {
+      const content = `---
+name: vercel-composition-patterns
+description:
+  React composition patterns that scale. Use when refactoring components with
+  boolean prop proliferation, building flexible component libraries, or
+  designing reusable APIs.
+license: MIT
+metadata:
+  author: vercel
+  version: '1.0.0'
+---
+
+# React Composition Patterns
+`;
+
+      const result = parseSkillMd(content);
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe('vercel-composition-patterns');
+      expect(result?.description).toContain('React composition patterns that scale');
+      expect(result?.description).toContain('designing reusable APIs.');
+      expect(result?.license).toBe('MIT');
+      expect(result?.metadata).toEqual({ author: 'vercel', version: '1.0.0' });
+    });
+
+    it('should parse plain scalar description followed by nested metadata', () => {
+      const content = `---
+name: vercel-react-best-practices
+description:
+  React and Next.js performance optimization guidelines from Vercel Engineering.
+  This skill should be used when writing or reviewing React/Next.js code.
+license: MIT
+metadata:
+  author: vercel
+  version: '1.0.0'
+---
+
+# Content
+`;
+
+      const result = parseSkillMd(content);
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe('vercel-react-best-practices');
+      expect(result?.description).toContain('React and Next.js performance optimization');
+      expect(result?.description).toContain('reviewing React/Next.js code.');
+      expect(result?.license).toBe('MIT');
+      expect(result?.metadata).toEqual({ author: 'vercel', version: '1.0.0' });
+    });
+
     it('should prefer top-level version over metadata.version', () => {
       const content = `---
 name: my-skill
@@ -556,6 +605,47 @@ Dup.
         { name: 'pdf', description: 'x', content: '', rawContent: '', dirPath: '/a/pdf' },
       ] as Parameters<typeof filterSkillsByName>[0];
       expect(filterSkillsByName(skills, ['nonexistent'])).toEqual([]);
+    });
+
+    it('should match by directory name when SKILL.md name differs', () => {
+      const skills = [
+        {
+          name: 'vercel-react-best-practices',
+          description: 'x',
+          content: '',
+          rawContent: '',
+          dirPath: '/a/skills/react-best-practices',
+        },
+        {
+          name: 'web-design-guidelines',
+          description: 'x',
+          content: '',
+          rawContent: '',
+          dirPath: '/a/skills/web-design-guidelines',
+        },
+      ] as Parameters<typeof filterSkillsByName>[0];
+
+      // Match by directory name (not SKILL.md name)
+      const filtered = filterSkillsByName(skills, ['react-best-practices']);
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].name).toBe('vercel-react-best-practices');
+    });
+
+    it('should match by SKILL.md name with priority over directory name', () => {
+      const skills = [
+        {
+          name: 'my-skill',
+          description: 'x',
+          content: '',
+          rawContent: '',
+          dirPath: '/a/skills/different-dir-name',
+        },
+      ] as Parameters<typeof filterSkillsByName>[0];
+
+      // Match by SKILL.md name
+      expect(filterSkillsByName(skills, ['my-skill'])).toHaveLength(1);
+      // Match by directory name
+      expect(filterSkillsByName(skills, ['different-dir-name'])).toHaveLength(1);
     });
   });
 
