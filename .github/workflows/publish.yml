@@ -62,8 +62,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -82,14 +80,28 @@ jobs:
         id: check-pre
         run: |
           if [ -f ".changeset/pre.json" ]; then
-            echo "is_pre=true" >> $GITHUB_OUTPUT
+            TAG=$(jq -r '.tag' .changeset/pre.json)
+            if [ "$TAG" = "beta" ]; then
+              echo "is_pre=true" >> $GITHUB_OUTPUT
+            else
+              echo "::warning::pre.json exists but tag is '$TAG', expected 'beta'. Skipping."
+              echo "is_pre=false" >> $GITHUB_OUTPUT
+            fi
           else
             echo "is_pre=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Skip notice
+        if: steps.check-pre.outputs.is_pre != 'true'
+        run: echo "::notice::Not in beta pre-release mode. Skipping beta publish."
+
       - name: Version packages (beta)
         if: steps.check-pre.outputs.is_pre == 'true'
         run: pnpm changeset version
+
+      - name: Run tests
+        if: steps.check-pre.outputs.is_pre == 'true'
+        run: pnpm test:run
 
       - name: Build
         if: steps.check-pre.outputs.is_pre == 'true'
