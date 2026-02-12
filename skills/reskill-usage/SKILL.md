@@ -1,6 +1,3 @@
-<!-- source: README.md -->
-<!-- synced: 2026-02-12 -->
-
 ---
 name: reskill-usage
 description: Teaches AI agents how to use reskill — a Git-based package manager for AI agent skills. Covers CLI commands, install formats, configuration, publishing, and common workflows.
@@ -12,6 +9,9 @@ tags:
   - skills
   - reskill
 ---
+
+<!-- source: README.md -->
+<!-- synced: 2026-02-12 -->
 
 # reskill Usage Guide
 
