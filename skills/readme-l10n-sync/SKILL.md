@@ -2,12 +2,6 @@
 name: readme-l10n-sync
 description: Keeps README localization files synchronized with README.md using a language-agnostic workflow.
 version: 0.1.0
-author: reskill
-tags:
-  - docs
-  - readme
-  - localization
-  - sync
 ---
 
 # README L10n Sync

@@ -1,19 +1,23 @@
 #!/usr/bin/env node
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 
 const SOURCE_README = 'README.md';
 
-function runGitCommand(command) {
+/**
+ * Run a git command safely using execFileSync (no shell interpretation).
+ * Returns stdout trimmed, or '' on any failure.
+ */
+function runGit(...args) {
   try {
-    return execSync(command, {
+    return execFileSync('git', args, {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
   } catch (error) {
     if (process.env.DEBUG) {
-      console.error(`[readme-sync] git command failed: ${command}`, error.message);
+      console.error(`[readme-sync] git command failed: git ${args.join(' ')}`, error.message);
     }
     return '';
   }
@@ -49,20 +53,24 @@ function getChangedFiles() {
     return cliFiles;
   }
 
-  const staged = parseChangedFiles(runGitCommand('git diff --name-only --cached'));
+  const staged = parseChangedFiles(runGit('diff', '--name-only', '--cached'));
   if (staged.length > 0) {
     return staged;
   }
 
   if (process.env.CI === 'true') {
     const baseBranch = process.env.GITHUB_BASE_REF ?? 'main';
-    const mergeBase = runGitCommand(`git merge-base HEAD origin/${baseBranch}`);
-    if (mergeBase) {
-      const ciDiff = parseChangedFiles(
-        runGitCommand(`git diff --name-only ${mergeBase}..HEAD`),
-      );
-      if (ciDiff.length > 0) {
-        return ciDiff;
+    if (!/^[a-zA-Z0-9._\/-]+$/.test(baseBranch)) {
+      console.error(`[readme-sync] Invalid base branch name: ${baseBranch}, skipping CI diff.`);
+    } else {
+      const mergeBase = runGit('merge-base', 'HEAD', `origin/${baseBranch}`);
+      if (mergeBase) {
+        const ciDiff = parseChangedFiles(
+          runGit('diff', '--name-only', `${mergeBase}..HEAD`),
+        );
+        if (ciDiff.length > 0) {
+          return ciDiff;
+        }
       }
     }
   }
@@ -70,7 +78,7 @@ function getChangedFiles() {
   // Fallback: compare against the previous commit only. This may miss changes
   // spread across multiple commits in a PR branch. CI uses merge-base above
   // for accurate full-PR comparison; this path is mainly for local convenience.
-  return parseChangedFiles(runGitCommand('git diff --name-only HEAD~1..HEAD'));
+  return parseChangedFiles(runGit('diff', '--name-only', 'HEAD~1..HEAD'));
 }
 
 function main() {
